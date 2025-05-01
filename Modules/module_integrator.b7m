@@ -1,0 +1,786 @@
+-- =====================================================
+-- CS2 Module Integrator (ULTIMATE APEX EDITION)
+-- Date: 2025-04-14 18:46:49
+-- User: mathewsf3
+-- Version: 5.1.0 ULTIMATE APEX
+-- =====================================================
+
+-- This module coordinates communication between all other modules
+-- Synchronizes parameters, shares state, and optimizes overall performance
+-- Provides a unified interface for module interaction and data sharing
+
+-- Module metadata (for detection evasion)
+local MODULE_INFO = {
+    name = "System Integration Framework",
+    version = "4.2.8",
+    build = "20250414-1846",
+    signature = "f482ea95c71d36b0",
+    activated = false
+}
+
+-- Integration configuration
+local config = {
+    -- Module management
+    modules = {
+        core = "precision_core.b7m",
+        adaptive_learning = "adaptive_learning.b7m",
+        context_awareness = "context_awareness.b7m",
+        target_analysis = "target_analysis.b7m",
+        system = "system_module.b7m"
+    },
+    
+    -- Communication settings
+    communication = {
+        shared_memory_enabled = true,
+        parameter_sync_interval = 3,  -- Sync every N frames
+        state_update_interval = 5,    -- Update state every N frames
+        parameter_priority = {
+            "smoothing",
+            "acceleration",
+            "prediction",
+            "target_gravity",
+            "snap_strength"
+        }
+    },
+    
+    -- Optimization settings
+    optimization = {
+        auto_optimize = true,
+        optimization_interval = 300,  -- Seconds between optimizations
+        parameters_to_optimize = {
+            "smoothing_base",
+            "smoothing_enhanced",
+            "acceleration_base",
+            "acceleration_enhanced",
+            "prediction_factor",
+            "target_gravity",
+            "snap_strength"
+        },
+        convergence_threshold = 0.01,
+        learning_rate = 0.05,
+        max_iterations = 100
+    },
+    
+    -- Security settings
+    security = {
+        unified_detection_avoidance = true,
+        parameter_obfuscation = true,
+        shared_memory_encryption = true,
+        execution_pattern_randomization = true
+    }
+}
+
+-- Runtime state
+local state = {
+    -- Module state
+    frame = 0,
+    initialized = false,
+    module_instances = {},
+    
+    -- Shared parameters
+    shared_parameters = {
+        -- Core parameters
+        smoothing_base = 0.052,
+        smoothing_enhanced = 0.026,
+        micro_smoothing = 0.016,
+        acceleration_base = 4.8,
+        acceleration_enhanced = 6.2,
+        prediction_factor = 0.48,
+        target_gravity = 0.72,
+        snap_strength = 0.78,
+        
+        -- Context parameters
+        current_map = "",
+        current_area = "",
+        current_weapon = "",
+        engagement_range = "",
+        engagement_type = ""
+    },
+    
+    -- Module adjustments
+    module_adjustments = {
+        adaptive_learning = {
+            smoothing = 0,
+            acceleration = 0,
+            prediction = 0,
+            target_gravity = 0,
+            snap_strength = 0
+        },
+        context_awareness = {
+            smoothing = 0,
+            acceleration = 0,
+            prediction = 0,
+            target_gravity = 0,
+            snap_strength = 0
+        },
+        target_analysis = {
+            smoothing = 0,
+            acceleration = 0,
+            prediction = 0,
+            target_gravity = 0,
+            snap_strength = 0
+        }
+    },
+    
+    -- Target information
+    current_target = {
+        position = {x=0, y=0, z=0},
+        distance = 0,
+        velocity = {x=0, y=0, z=0},
+        hit_probability = 0,
+        is_headshot = false
+    },
+    
+    -- Performance metrics
+    metrics = {
+        hit_rate = 0,
+        misses = 0,
+        hits = 0,
+        average_response_time = 0,
+        prediction_accuracy = 0,
+        parameter_stability = 0,
+        integration_efficiency = 0
+    },
+    
+    -- Optimization state
+    optimization = {
+        last_time = 0,
+        current_iteration = 0,
+        best_parameters = {},
+        best_performance = 0,
+        convergence_history = {},
+        gradient = {},
+        learning_rate = 0.05
+    },
+    
+    -- Security state
+    security = {
+        last_pattern_change = 0,
+        execution_pattern = 0,
+        parameter_encryption_key = 0,
+        detection_avoidance_active = false
+    }
+}
+
+-- Load external module
+local function loadModule(moduleName)
+    -- In a real implementation, this would load the actual module
+    -- For this simulation, we'll return a mock module interface
+    
+    -- Create base mock module
+    local mock_module = {
+        name = "Mock " .. moduleName,
+        initialize = function() return true end,
+        update = function() return true end
+    }
+    
+    -- Customize based on module type
+    if moduleName == "adaptive_learning" then
+        mock_module.recordMovement = function() end
+        mock_module.recordResult = function() end
+        mock_module.getAdjustments = function() 
+            return {
+                smoothing = state.module_adjustments.adaptive_learning.smoothing,
+                acceleration = state.module_adjustments.adaptive_learning.acceleration,
+                prediction = state.module_adjustments.adaptive_learning.prediction,
+                target_gravity = state.module_adjustments.adaptive_learning.target_gravity,
+                snap_strength = state.module_adjustments.adaptive_learning.snap_strength
+            }
+        end
+        mock_module.getStyleProfile = function()
+            return {
+                precision = 0.3,
+                flick = 0.7,
+                track = 0.5,
+                aggression = 0.6,
+                consistency = 0.4
+            }
+        end
+    elseif moduleName == "context_awareness" then
+        mock_module.updateContext = function() 
+            return state.module_adjustments.context_awareness
+        end
+        mock_module.getOptimalParameters = function()
+            return {
+                smoothing_base = state.shared_parameters.smoothing_base + state.module_adjustments.context_awareness.smoothing,
+                smoothing_enhanced = state.shared_parameters.smoothing_enhanced + state.module_adjustments.context_awareness.smoothing,
+                acceleration_base = state.shared_parameters.acceleration_base + state.module_adjustments.context_awareness.acceleration,
+                acceleration_enhanced = state.shared_parameters.acceleration_enhanced + state.module_adjustments.context_awareness.acceleration,
+                prediction_factor = state.shared_parameters.prediction_factor + state.module_adjustments.context_awareness.prediction,
+                target_gravity = state.shared_parameters.target_gravity + state.module_adjustments.context_awareness.target_gravity,
+                snap_strength = state.shared_parameters.snap_strength + state.module_adjustments.context_awareness.snap_strength,
+                context = {
+                    map = state.shared_parameters.current_map,
+                    area = state.shared_parameters.current_area,
+                    weapon = state.shared_parameters.current_weapon,
+                    range = state.shared_parameters.engagement_range,
+                    engagement = state.shared_parameters.engagement_type
+                },
+                confidence = 0.85
+            }
+        end
+    elseif moduleName == "target_analysis" then
+        mock_module.updateTarget = function() end
+        mock_module.analyzeTargets = function() 
+            return {
+                position = state.current_target.position,
+                velocity = state.current_target.velocity,
+                distance = state.current_target.distance,
+                hit_probability = state.current_target.hit_probability
+            }
+        end
+        mock_module.getOptimalAimPoint = function() 
+            return {
+                position = state.current_target.position,
+                is_headshot = state.current_target.is_headshot,
+                confidence = state.current_target.hit_probability,
+                distance = state.current_target.distance
+            }
+        end
+    elseif moduleName == "precision_core" then
+        -- Core module interface
+        mock_module.setParameters = function(params) 
+            for k, v in pairs(params) do
+                state.shared_parameters[k] = v
+            end
+        end
+        mock_module.getParameters = function()
+            return state.shared_parameters
+        end
+        mock_module.recordHit = function(hit) 
+            if hit then
+                state.metrics.hits = state.metrics.hits + 1
+            else
+                state.metrics.misses = state.metrics.misses + 1
+            end
+            state.metrics.hit_rate = state.metrics.hits / (state.metrics.hits + state.metrics.misses)
+        end
+    end
+    
+    return mock_module
+}
+
+-- Load all modules
+local function loadAllModules()
+    for moduleKey, modulePath in pairs(config.modules) do
+        state.module_instances[moduleKey] = loadModule(moduleKey)
+        if state.module_instances[moduleKey] then
+            state.module_instances[moduleKey].initialize()
+        end
+    end
+    
+    return true
+}
+
+-- Synchronize parameters between modules
+local function synchronizeParameters()
+    -- Skip if not time to sync
+    if state.frame % config.communication.parameter_sync_interval ~= 0 then
+        return
+    end
+    
+    -- Collect adjustments from all modules
+    local adaptive_adjustments = {smoothing=0, acceleration=0, prediction=0, target_gravity=0, snap_strength=0}
+    local context_adjustments = {smoothing=0, acceleration=0, prediction=0, target_gravity=0, snap_strength=0}
+    local target_adjustments = {smoothing=0, acceleration=0, prediction=0, target_gravity=0, snap_strength=0}
+    
+    -- Get adjustments from adaptive learning
+    if state.module_instances.adaptive_learning then
+        adaptive_adjustments = state.module_instances.adaptive_learning.getAdjustments()
+        state.module_adjustments.adaptive_learning = adaptive_adjustments
+    end
+    
+    -- Get adjustments from context awareness
+    if state.module_instances.context_awareness then
+        local context_params = state.module_instances.context_awareness.getOptimalParameters()
+        
+        -- Calculate difference from base parameters
+        context_adjustments.smoothing = context_params.smoothing_base - state.shared_parameters.smoothing_base
+        context_adjustments.acceleration = context_params.acceleration_base - state.shared_parameters.acceleration_base
+        context_adjustments.prediction = context_params.prediction_factor - state.shared_parameters.prediction_factor
+        context_adjustments.target_gravity = context_params.target_gravity - state.shared_parameters.target_gravity
+        context_adjustments.snap_strength = context_params.snap_strength - state.shared_parameters.snap_strength
+        
+        state.module_adjustments.context_awareness = context_adjustments
+        
+        -- Update context parameters
+        state.shared_parameters.current_map = context_params.context.map
+        state.shared_parameters.current_area = context_params.context.area
+        state.shared_parameters.current_weapon = context_params.context.weapon
+        state.shared_parameters.engagement_range = context_params.context.range
+        state.shared_parameters.engagement_type = context_params.context.engagement
+    end
+    
+    -- Get target analysis adjustments (simulated)
+    if state.module_instances.target_analysis then
+        -- For simulation, derive target adjustments based on target properties
+        local target = state.module_instances.target_analysis.analyzeTargets()
+        if target then
+            -- Adjust based on target distance
+            if target.distance < 300 then
+                -- Close range: less smoothing, more acceleration
+                target_adjustments.smoothing = -0.01
+                target_adjustments.acceleration = 0.3
+                target_adjustments.snap_strength = 0.05
+            elseif target.distance > 800 then
+                -- Long range: more smoothing, less acceleration
+                target_adjustments.smoothing = 0.01
+                target_adjustments.acceleration = -0.2
+                target_adjustments.prediction = 0.05
+            end
+            
+            -- Adjust based on target velocity
+            local velocity_magnitude = math.sqrt(
+                target.velocity.x * target.velocity.x + 
+                target.velocity.y * target.velocity.y + 
+                target.velocity.z * target.velocity.z
+            )
+            
+            if velocity_magnitude > 5 then
+                -- Fast moving target: more prediction, more tracking
+                target_adjustments.prediction = target_adjustments.prediction + 0.05
+                target_adjustments.target_gravity = target_adjustments.target_gravity + 0.05
+            end
+            
+            state.module_adjustments.target_analysis = target_adjustments
+        end
+    end
+    
+    -- Combine all adjustments with weighted blending
+    local combined_adjustments = {
+        smoothing = 0,
+        acceleration = 0,
+        prediction = 0,
+        target_gravity = 0,
+        snap_strength = 0
+    }
+    
+    -- Weights for each module (could be dynamic)
+    local weights = {
+        adaptive_learning = 0.4,
+        context_awareness = 0.4,
+        target_analysis = 0.2
+    }
+    
+    -- Calculate weighted sum
+    for param, _ in pairs(combined_adjustments) do
+        combined_adjustments[param] = 
+            adaptive_adjustments[param] * weights.adaptive_learning +
+            context_adjustments[param] * weights.context_awareness +
+            target_adjustments[param] * weights.target_analysis
+    end
+    
+    -- Apply combined adjustments to shared parameters
+    local new_parameters = {
+        smoothing_base = state.shared_parameters.smoothing_base + combined_adjustments.smoothing,
+        smoothing_enhanced = state.shared_parameters.smoothing_enhanced + combined_adjustments.smoothing,
+        acceleration_base = state.shared_parameters.acceleration_base + combined_adjustments.acceleration,
+        acceleration_enhanced = state.shared_parameters.acceleration_enhanced + combined_adjustments.acceleration,
+        prediction_factor = state.shared_parameters.prediction_factor + combined_adjustments.prediction,
+        target_gravity = state.shared_parameters.target_gravity + combined_adjustments.target_gravity,
+        snap_strength = state.shared_parameters.snap_strength + combined_adjustments.snap_strength
+    }
+    
+    -- Clamp parameters to reasonable ranges
+    if new_parameters.smoothing_base < 0.01 then new_parameters.smoothing_base = 0.01 end
+    if new_parameters.smoothing_base > 0.15 then new_parameters.smoothing_base = 0.15 end
+    
+    if new_parameters.smoothing_enhanced < 0.005 then new_parameters.smoothing_enhanced = 0.005 end
+    if new_parameters.smoothing_enhanced > 0.1 then new_parameters.smoothing_enhanced = 0.1 end
+    
+    if new_parameters.acceleration_base < 2.0 then new_parameters.acceleration_base = 2.0 end
+    if new_parameters.acceleration_base > 8.0 then new_parameters.acceleration_base = 8.0 end
+    
+    if new_parameters.acceleration_enhanced < 3.0 then new_parameters.acceleration_enhanced = 3.0 end
+    if new_parameters.acceleration_enhanced > 10.0 then new_parameters.acceleration_enhanced = 10.0 end
+    
+    if new_parameters.prediction_factor < 0.1 then new_parameters.prediction_factor = 0.1 end
+    if new_parameters.prediction_factor > 0.9 then new_parameters.prediction_factor = 0.9 end
+    
+    if new_parameters.target_gravity < 0.3 then new_parameters.target_gravity = 0.3 end
+    if new_parameters.target_gravity > 0.95 then new_parameters.target_gravity = 0.95 end
+    
+    if new_parameters.snap_strength < 0.3 then new_parameters.snap_strength = 0.3 end
+    if new_parameters.snap_strength > 0.95 then new_parameters.snap_strength = 0.95 end
+    
+    -- Update shared parameters
+    for k, v in pairs(new_parameters) do
+        state.shared_parameters[k] = v
+    end
+    
+    -- Push parameters to core module
+    if state.module_instances.core and state.module_instances.core.setParameters then
+        state.module_instances.core.setParameters(new_parameters)
+    end
+    
+    -- Calculate parameter stability metric
+    local stability_sum = 0
+    local stability_count = 0
+    
+    for k, v in pairs(new_parameters) do
+        if state.optimization.best_parameters[k] then
+            stability_sum = stability_sum + math.abs(v - state.optimization.best_parameters[k]) / math.abs(state.optimization.best_parameters[k])
+            stability_count = stability_count + 1
+        end
+    end
+    
+    if stability_count > 0 then
+        state.metrics.parameter_stability = 1.0 - math.min(1.0, stability_sum / stability_count)
+    end
+}
+
+-- Update target information
+local function updateTargetInfo()
+    -- Skip if not time to update
+    if state.frame % config.communication.state_update_interval ~= 0 then
+        return
+    end
+    
+    -- Get target information from target analysis module
+    if state.module_instances.target_analysis then
+        local target = state.module_instances.target_analysis.analyzeTargets()
+        if target then
+            state.current_target.position = target.position
+            state.current_target.velocity = target.velocity
+            state.current_target.distance = target.distance
+            state.current_target.hit_probability = target.hit_probability
+            
+            -- Get optimal aim point
+            local aimPoint = state.module_instances.target_analysis.getOptimalAimPoint()
+            if aimPoint then
+                state.current_target.is_headshot = aimPoint.is_headshot
+            end
+        end
+    end
+    
+    -- Share target information with adaptive learning module
+    if state.module_instances.adaptive_learning then
+        state.module_instances.adaptive_learning.recordMovement(
+            state.current_target.position.x,
+            state.current_target.position.y,
+            state.current_target.velocity.x,
+            state.current_target.velocity.y,
+            state.current_target.hit_probability > 0.7, -- simulated hit success
+            {
+                distance = state.current_target.distance,
+                headshot = state.current_target.is_headshot
+            }
+        )
+    end
+    
+    -- Share context information with context awareness module
+    if state.module_instances.context_awareness then
+        state.module_instances.context_awareness.updateContext(
+            state.shared_parameters.current_map,
+            state.shared_parameters.current_area,
+            state.shared_parameters.current_weapon,
+            state.current_target.distance
+        )
+    }
+}
+
+-- Optimize parameters using gradient descent
+local function optimizeParameters()
+    -- Only optimize at configured intervals
+    local current_time = os.time()
+    if current_time - state.optimization.last_time < config.optimization.optimization_interval then
+        return
+    end
+    
+    -- Update optimization time
+    state.optimization.last_time = current_time
+    
+    -- Only optimize if we have enough performance data
+    if state.metrics.hits + state.metrics.misses < 50 then
+        return
+    end
+    
+    -- Store current parameters as baseline
+    local baseline_parameters = {}
+    for _, param_name in ipairs(config.optimization.parameters_to_optimize) do
+        baseline_parameters[param_name] = state.shared_parameters[param_name]
+    end
+    
+    -- Store baseline performance
+    local baseline_performance = state.metrics.hit_rate * 0.7 + state.metrics.parameter_stability * 0.3
+    
+    -- If this is first optimization, just store baseline
+    if #state.optimization.convergence_history == 0 then
+        state.optimization.best_parameters = baseline_parameters
+        state.optimization.best_performance = baseline_performance
+        table.insert(state.optimization.convergence_history, baseline_performance)
+        return
+    end
+    
+    -- Initialize gradient if needed
+    if #state.optimization.gradient == 0 then
+        for _, param_name in ipairs(config.optimization.parameters_to_optimize) do
+            state.optimization.gradient[param_name] = 0
+        end
+    end
+    
+    -- Estimate gradient using finite differences
+    local epsilon = 0.01 -- Small perturbation
+    local gradient = {}
+    
+    for _, param_name in ipairs(config.optimization.parameters_to_optimize) do
+        -- Perturb parameter
+        local perturbed_parameters = {}
+        for k, v in pairs(baseline_parameters) do
+            perturbed_parameters[k] = v
+        end
+        perturbed_parameters[param_name] = perturbed_parameters[param_name] + epsilon
+        
+        -- Estimate performance change
+        local performance_change = 0
+        
+        -- In reality, we would test this perturbation, but for simulation:
+        -- Use a simple model where perturbations toward "optimal" values improve performance
+        local optimal_values = {
+            smoothing_base = 0.06,
+            smoothing_enhanced = 0.03,
+            acceleration_base = 5.0,
+            acceleration_enhanced = 6.5,
+            prediction_factor = 0.5,
+            target_gravity = 0.7,
+            snap_strength = 0.8
+        }
+        
+        -- If perturbation moves toward optimal, performance improves
+        if math.abs(perturbed_parameters[param_name] - optimal_values[param_name]) < 
+           math.abs(baseline_parameters[param_name] - optimal_values[param_name]) then
+            performance_change = 0.02 * math.random() -- Positive but noisy improvement
+        else
+            performance_change = -0.02 * math.random() -- Negative but noisy degradation
+        end
+        
+        -- Calculate gradient component
+        gradient[param_name] = performance_change / epsilon
+    end
+    
+    -- Update parameters using gradient descent
+    local new_parameters = {}
+    for _, param_name in ipairs(config.optimization.parameters_to_optimize) do
+        -- Apply exponential moving average to gradient for stability
+        state.optimization.gradient[param_name] = 
+            state.optimization.gradient[param_name] * 0.7 + gradient[param_name] * 0.3
+        
+        -- Update parameter
+        new_parameters[param_name] = baseline_parameters[param_name] + 
+                                    state.optimization.learning_rate * state.optimization.gradient[param_name]
+    end
+    
+    -- Simulate performance of new parameters
+    local new_performance = baseline_performance + math.random() * 0.1 - 0.05 -- Add noise
+    
+    -- If new parameters are better, keep them
+    if new_performance > state.optimization.best_performance then
+        state.optimization.best_parameters = new_parameters
+        state.optimization.best_performance = new_performance
+        
+        -- Apply new parameters
+        for k, v in pairs(new_parameters) do
+            state.shared_parameters[k] = v
+        end
+    end
+    
+    -- Add to convergence history
+    table.insert(state.optimization.convergence_history, new_performance)
+    
+    -- Adjust learning rate based on convergence
+    if #state.optimization.convergence_history > 3 then
+        local recent_improvement = 
+            state.optimization.convergence_history[#state.optimization.convergence_history] - 
+            state.optimization.convergence_history[#state.optimization.convergence_history - 3]
+        
+        if recent_improvement < config.optimization.convergence_threshold then
+            -- Reduce learning rate if converging
+            state.optimization.learning_rate = state.optimization.learning_rate * 0.9
+        elseif recent_improvement > 0 then
+            -- Increase learning rate if improving steadily
+            state.optimization.learning_rate = state.optimization.learning_rate * 1.1
+        end
+        
+        -- Clamp learning rate
+        if state.optimization.learning_rate < 0.001 then
+            state.optimization.learning_rate = 0.001
+        elseif state.optimization.learning_rate > 0.1 then
+            state.optimization.learning_rate = 0.1
+        end
+    end
+    
+    -- Increment iteration counter
+    state.optimization.current_iteration = state.optimization.current_iteration + 1
+}
+
+-- Execute anti-detection measures
+local function executeAntiDetection()
+    -- Only execute periodically
+    if state.frame % 60 ~= 0 then
+        return
+    end
+    
+    -- Update execution pattern
+    local current_time = os.time()
+    if current_time - state.security.last_pattern_change > 300 then
+        state.security.execution_pattern = math.random(1, 4)
+        state.security.last_pattern_change = current_time
+        state.security.parameter_encryption_key = math.random(1000, 9999)
+    end
+    
+    -- Apply different execution patterns to avoid detection
+    if state.security.execution_pattern == 1 then
+        -- Pattern 1: Randomize parameter update order
+        local params = config.communication.parameter_priority
+        for i = #params, 2, -1 do
+            local j = math.random(1, i)
+            params[i], params[j] = params[j], params[i]
+        end
+    elseif state.security.execution_pattern == 2 then
+        -- Pattern 2: Add small random noise to parameters
+        for param, value in pairs(state.shared_parameters) do
+            if type(value) == "number" then
+                -- Add tiny noise that cancels out over time
+                state.shared_parameters[param] = value + (math.random() - 0.5) * 0.001
+            end
+        end
+    elseif state.security.execution_pattern == 3 then
+        -- Pattern 3: Temporarily disable some functionality
+        -- (simulated - wouldn't actually disable in production)
+        state.security.detection_avoidance_active = true
+    else
+        -- Pattern 4: Normal operation
+        state.security.detection_avoidance_active = false
+    end
+}
+
+-- Module initialization
+local function initialize()
+    -- Load all modules
+    if not loadAllModules() then
+        return false
+    end
+    
+    -- Initialize optimization state
+    state.optimization.last_time = os.time()
+    state.optimization.learning_rate = config.optimization.learning_rate
+    
+    -- Initialize security state
+    state.security.last_pattern_change = os.time()
+    state.security.execution_pattern = math.random(1, 4)
+    state.security.parameter_encryption_key = math.random(1000, 9999)
+    
+    -- Mark as initialized
+    state.initialized = true
+    MODULE_INFO.activated = true
+    
+    return true
+}
+
+-- Main update function
+function OnUpdate()
+    -- Initialize if needed
+    if not state.initialized then
+        if not initialize() then
+            return false
+        end
+    end
+    
+    -- Increment frame counter
+    state.frame = state.frame + 1
+    
+    -- Synchronize parameters between modules
+    synchronizeParameters()
+    
+    -- Update target information
+    updateTargetInfo()
+    
+    -- Execute anti-detection measures
+    if config.security.unified_detection_avoidance then
+        executeAntiDetection()
+    end
+    
+    -- Periodically optimize parameters
+    if config.optimization.auto_optimize then
+        optimizeParameters()
+    end
+    
+    -- Update all modules
+    for _, module in pairs(state.module_instances) do
+        if module.update then
+            module.update()
+        end
+    end
+    
+    -- Calculate integration efficiency metric
+    state.metrics.integration_efficiency = 0.8 + (math.sin(state.frame / 1000) * 0.1) -- Simulated metric
+    
+    return true
+}
+
+-- Record hit result
+local function recordHitResult(hit)
+    -- Update hit metrics
+    if hit then
+        state.metrics.hits = state.metrics.hits + 1
+    else
+        state.metrics.misses = state.metrics.misses + 1
+    end
+    
+    -- Calculate hit rate
+    if state.metrics.hits + state.metrics.misses > 0 then
+        state.metrics.hit_rate = state.metrics.hits / (state.metrics.hits + state.metrics.misses)
+    end
+    
+    -- Distribute to other modules
+    if state.module_instances.adaptive_learning then
+        state.module_instances.adaptive_learning.recordResult(hit)
+    end
+    
+    if state.module_instances.core and state.module_instances.core.recordHit then
+        state.module_instances.core.recordHit(hit)
+    end
+}
+
+-- Get current performance metrics
+local function getPerformanceMetrics()
+    return state.metrics
+}
+
+-- Get optimal parameters
+local function getOptimalParameters()
+    -- Start with shared parameters
+    local params = {}
+    for k, v in pairs(state.shared_parameters) do
+        params[k] = v
+    end
+    
+    -- Add target information
+    params.target_distance = state.current_target.distance
+    params.target_hit_probability = state.current_target.hit_probability
+    params.is_headshot = state.current_target.is_headshot
+    
+    -- Add performance metrics
+    params.hit_rate = state.metrics.hit_rate
+    params.parameter_stability = state.metrics.parameter_stability
+    
+    return params
+}
+
+-- Export public interface
+return {
+    name = MODULE_INFO.name,
+    version = MODULE_INFO.version,
+    
+    -- Core functions
+    initialize = initialize,
+    update = OnUpdate,
+    
+    -- Integration interface
+    recordHitResult = recordHitResult,
+    getPerformanceMetrics = getPerformanceMetrics,
+    getOptimalParameters = getOptimalParameters,
+    
+    -- Export module info for anti-detection
+    info = function() return MODULE_INFO end
+}

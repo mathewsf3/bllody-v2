@@ -1,0 +1,60 @@
+{
+  "version": "5.2.1",
+  "date": "2025-04-29 03:40:24",
+  "user": "mathewsf3",
+  "profile": "ultimate_apex_pro",
+  "settings": {
+    "always_active": true,
+    "head_ratio": 0.30,
+    "torso_ratio": 0.70,
+    "mouse_sensitivity": "ultra_maximum",
+    "enhanced_when_pressed": false,
+    "target_snap": "ultra",
+    "prediction": "ultra_maximum",
+    "flick_assist": "ultra_maximum",
+    "stealth_mode": "disabled",
+    "adaptive_learning": "enabled",
+    "context_awareness": "maximum",
+    "target_analysis": "maximum",
+    "active_profile": "maximum",
+    "auto_profile_switching": false,
+    "gpu_mode": "ultra"
+  },
+  "performance": {
+    "smoothing_base": 0.002,
+    "smoothing_enhanced": 0.001,
+    "micro_smoothing": 0.0005,
+    "acceleration_base": 18.0,
+    "acceleration_enhanced": 20.0,
+    "flick_acceleration": 25.0,
+    "max_movement_base": 45,
+    "max_movement_enhanced": 60,
+    "flick_max_movement": 75,
+    "gpu_ultra_settings": {
+      "enabled": true,
+      "mode": "maximum_performance",
+      "memory_priority": "ultra",
+      "compute_priority": "ultra"
+    }
+  }
+}
+
+{
+  "interface": {
+    "overlay": {
+      "type": "system_monitor",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "style": {
+        "opacity": 0.95,
+        "blur": true
+      }
+    },
+    "hotkeys": {
+      "toggle": "RightControl + Home",
+      "quick_settings": "RightControl + End"
+    }
+  }
+}

@@ -1,0 +1,170 @@
+-- CS2 Precision Core Module (ULTIMATE APEX PRO)
+-- Date: 2025-04-29 03:40:24
+-- Version: 5.2.1 APEX PRO
+
+-- Adaptive module integration flag
+local ADAPTIVE_LEARNING_ENABLED = true
+
+-- GPU Ultra Configuration
+local _gpu_config = {
+    ultra = {
+        enabled = true,
+        cuda = {
+            device = 0,
+            memory_type = "gpu_unified",
+            compute_mode = "exclusive_process",
+            cache_level = "l2_maximized",
+            power_state = "max_performance"
+        },
+        tensor = {
+            cores = "enabled",
+            precision = "fp16",
+            optimization = "speed_focused",
+            memory_format = "channels_last"
+        }
+    }
+}
+
+-- YOLO Configuration with GPU Ultra
+local _yolo_config = {
+    model = {
+        enabled = true,
+        confidence = 0.98,
+        iou_threshold = 0.65,
+        input_size = {
+            width = 416,
+            height = 416
+        },
+        classes = {
+            priority = true,
+            confidence_boost = 1.5
+        },
+        gpu_ultra = {
+            enabled = true,
+            batch_processing = "ultra",
+            memory_pool = "cuda_managed",
+            stream_priority = "high_priority"
+        }
+    },
+    inference = {
+        cuda_enabled = true,
+        tensorrt = true,
+        batch_size = 1,
+        fp16 = true
+    }
+}
+
+-- Core configuration with advanced variable obfuscation
+local _c = {
+    -- Target Acquisition System (APEX PRO)
+    t = {
+        hr = 0.30,     -- Head ratio
+        ho = -8,       -- Head offset
+        bo = 14,       -- Body offset
+        tr = 400,      -- Target range
+        vr = 320,      -- Vertical range
+        cb = 0.60,     -- Center bias
+        auto_aim = {
+            enabled = true,
+            strength = 2.00,
+            aim_delay = 0.00,
+            max_angle = 180.0,
+            persist_time = 1.5,
+            snap_speed = 4.0,
+            tracking_speed = 4.0,
+            activation_threshold = 0.002,
+            gpu_acceleration = {
+                mode = "ultra",
+                buffer_optimization = true,
+                prediction_quality = "maximum"
+            },
+            yolo_assist = {
+                enabled = true,
+                strength_multiplier = 1.8,
+                prediction_weight = 0.95,
+                tracking_priority = 2.0
+            }
+        }
+    },
+    -- Performance Settings (APEX PRO)
+    p = {
+        bs = 0.002,    -- Base smoothing
+        es = 0.001,    -- Enhanced smoothing
+        ms = 0.0005,   -- Micro smoothing
+        ba = 18.0,     -- Base acceleration
+        ea = 20.0,     -- Enhanced acceleration
+        fa = 25.0,     -- Flick acceleration
+        bm = 45,       -- Base movement
+        em = 60,       -- Enhanced movement
+        fm = 75,       -- Flick movement
+        pf = 0.85,     -- Performance factor
+        mc = 0.85,     -- Movement control
+        dc = 0.20,     -- Deceleration control
+        gpu_ultra = {
+            enabled = true,
+            memory_type = "pinned",
+            compute_mode = "exclusive",
+            power_limit = 100
+        },
+        yolo_performance = {
+            enabled = true,
+            boost_mode = "maximum",
+            tensor_cores = true,
+            cache_predictions = true
+        }
+    },
+    -- Advanced Settings (APEX PRO)
+    a = {
+        st = 32,       -- Sensitivity threshold
+        ss = 0.95,     -- Sensitivity scaling
+        ts = 0.90,     -- Tracking sensitivity
+        nr = 0.02,     -- Noise reduction
+        fd = true,     -- Fast detection
+        fa = 1.20,     -- Fast acceleration
+        tp = 0.85,     -- Target priority
+        hp = 0.75,     -- Head priority
+        torso_bias = {
+            enabled = true,
+            strength = 0.90,
+            min_streak = 1,
+            max_streak = 2,
+            cooldown = 2
+        }
+    },
+    -- Adaptive Learning Integration
+    al = {
+        enabled = true,
+        weight = 0.90,
+        rate = 0.15,
+        decay = 0.98,
+        boost = 1.80,
+        cap = 0.95
+    }
+}
+
+-- Runtime state initialization
+local _s = {
+    yolo = {
+        learning_rate = 0.15,
+        update_frequency = 0.001,
+        prediction_buffer = 5,
+        confidence_decay = 0.98
+    },
+    al = {
+        preferences = {}
+    }
+}
+
+-- Export adaptive module interface
+if ADAPTIVE_LEARNING_ENABLED then
+    return {
+        version = "5.2.1",
+        type = "precision",
+        adaptive = {
+            updateLearning = _adaptiveLearn,
+            getPreferences = function() return _s.al.preferences end,
+            reset = function() _s.al.preferences = {} end
+        },
+        init = function() return true end
+    }
+end

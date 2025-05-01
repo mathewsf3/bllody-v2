@@ -1,0 +1,731 @@
+-- =====================================================
+-- CS2 Adaptive Learning Module (APEX EDITION)
+-- Date: 2025-04-14 16:35:31
+-- User: mathewsf3
+-- Version: 5.0.0 APEX
+-- =====================================================
+
+-- This module provides machine learning capabilities to the precision core
+-- It analyzes user behavior and game patterns to optimize performance
+-- Appears as a legitimate system utility while providing advanced functionality
+
+-- System integration flags (for appearance)
+local SYSTEM_MODULE = {
+    name = "BW8 Resource Optimizer",
+    version = "2.4.8",
+    build = "20250414",
+    initialized = false
+}
+
+-- Learning parameters
+local learning = {
+    -- Core learning parameters
+    learn_rate = 0.045,        -- How quickly system adapts to new patterns
+    memory_decay = 0.998,      -- How quickly old patterns are forgotten
+    confidence_threshold = 0.75, -- Minimum confidence for applying predictions
+    max_history = 128,         -- Maximum history entries for pattern analysis
+    
+    -- Pattern recognition
+    pattern_threshold = 0.82,  -- Similarity threshold for pattern recognition
+    pattern_length = 8,        -- Length of pattern sequences to analyze
+    pattern_weight = 0.65,     -- Weight of pattern-based predictions
+    
+    -- Player style learning
+    style_categories = {
+        "precision",           -- Precision targeting
+        "flick",               -- Flick movements
+        "track",               -- Tracking moving targets
+        "aggression",          -- Aggressive vs cautious play style
+        "consistency",         -- Consistency of movements
+    },
+    
+    -- Game state analysis
+    context_factors = {
+        "distance",            -- Target distance
+        "speed",               -- Target speed
+        "size",                -- Target size
+        "density",             -- Target density in area
+        "importance"           -- Target importance
+    },
+    
+    -- Performance monitoring
+    metrics = {
+        hit_rate = 0,          -- Successful hits / total attempts
+        accuracy = 0,          -- Closeness to target center
+        response_time = 0,     -- Time to acquire target
+        efficiency = 0,        -- Movement efficiency ratio
+    }
+}
+
+-- Runtime state (hidden from external inspection)
+local state = {
+    -- Operational state
+    initialized = true,
+    active = true,
+    frame = 0,
+    last_update = 0,
+    
+    -- Pattern recognition
+    patterns = {},
+    movement_history = {},
+    history_index = 1,
+    
+    -- Player style profile
+    style_profile = {},
+    style_confidence = {},
+    
+    -- Performance tracking
+    metrics = {
+        hits = 0,
+        misses = 0,
+        accuracy_samples = {},
+        response_times = {},
+    },
+    
+    -- Game context
+    context = {
+        current_map = "",
+        weapon_type = "",
+        engagement_distance = 0,
+    },
+    
+    -- Neural network simulation (simplified)
+    network = {
+        weights = {},
+        biases = {},
+        activations = {}
+    }
+}
+
+-- Initialize player style profile
+for _, category in ipairs(learning.style_categories) do
+    state.style_profile[category] = 0.0 -- Neutral starting point
+    state.style_confidence[category] = 0.0 -- No confidence initially
+end
+
+-- Initialize pattern storage
+for i = 1, 16 do
+    state.patterns[i] = {
+        sequence = {},
+        frequency = 0,
+        last_seen = 0,
+        confidence = 0
+    }
+    
+    -- Initialize sequence storage
+    for j = 1, learning.pattern_length do
+        state.patterns[i].sequence[j] = {x = 0, y = 0, t = 0}
+    end
+end
+
+-- Initialize movement history
+for i = 1, learning.max_history do
+    state.movement_history[i] = {
+        x = 0, y = 0,         -- Movement vector
+        dx = 0, dy = 0,       -- Derivative (acceleration)
+        t = 0,                -- Timestamp
+        hit = false,          -- Hit result
+        context = {}          -- Game context
+    }
+end
+
+-- Initialize neural network (simplified approximation)
+local function initializeNetwork()
+    -- Input layer (10 inputs)
+    -- Hidden layer (8 neurons)
+    -- Output layer (5 outputs - adjustments for different parameters)
+    
+    -- Initialize weights with small random values
+    state.network.weights = {
+        input_hidden = {},
+        hidden_output = {}
+    }
+    
+    -- Initialize with random small weights
+    for i = 1, 10 do
+        state.network.weights.input_hidden[i] = {}
+        for j = 1, 8 do
+            state.network.weights.input_hidden[i][j] = (math.random() * 0.2) - 0.1
+        end
+    end
+    
+    for i = 1, 8 do
+        state.network.weights.hidden_output[i] = {}
+        for j = 1, 5 do
+            state.network.weights.hidden_output[i][j] = (math.random() * 0.2) - 0.1
+        end
+    end
+    
+    -- Initialize biases
+    state.network.biases = {
+        hidden = {},
+        output = {}
+    }
+    
+    for i = 1, 8 do
+        state.network.biases.hidden[i] = (math.random() * 0.2) - 0.1
+    end
+    
+    for i = 1, 5 do
+        state.network.biases.output[i] = (math.random() * 0.2) - 0.1
+    end
+    
+    -- Initialize activations
+    state.network.activations = {
+        hidden = {},
+        output = {}
+    }
+    
+    for i = 1, 8 do
+        state.network.activations.hidden[i] = 0
+    end
+    
+    for i = 1, 5 do
+        state.network.activations.output[i] = 0
+    end
+end
+
+-- Activation function (ReLU - Rectified Linear Unit)
+local function relu(x)
+    return math.max(0, x)
+end
+
+-- Forward pass through the network
+local function networkForward(inputs)
+    -- Calculate hidden layer activations
+    for i = 1, 8 do
+        local sum = state.network.biases.hidden[i]
+        for j = 1, #inputs do
+            sum = sum + inputs[j] * state.network.weights.input_hidden[j][i]
+        end
+        state.network.activations.hidden[i] = relu(sum)
+    end
+    
+    -- Calculate output layer activations
+    for i = 1, 5 do
+        local sum = state.network.biases.output[i]
+        for j = 1, 8 do
+            sum = sum + state.network.activations.hidden[j] * state.network.weights.hidden_output[j][i]
+        end
+        state.network.activations.output[i] = math.tanh(sum)  -- Use tanh for outputs (-1 to 1)
+    end
+    
+    return state.network.activations.output
+end
+
+-- Update network weights with simple backpropagation (simplified learning)
+local function updateNetwork(inputs, targets, learn_rate)
+    -- First do a forward pass
+    networkForward(inputs)
+    
+    -- Output layer errors and updates
+    local output_errors = {}
+    for i = 1, 5 do
+        output_errors[i] = targets[i] - state.network.activations.output[i]
+        
+        -- Update output layer biases
+        state.network.biases.output[i] = state.network.biases.output[i] + 
+                                        output_errors[i] * learn_rate
+    end
+    
+    -- Update hidden-to-output weights
+    for i = 1, 8 do
+        for j = 1, 5 do
+            state.network.weights.hidden_output[i][j] = 
+                state.network.weights.hidden_output[i][j] + 
+                state.network.activations.hidden[i] * output_errors[j] * learn_rate
+        end
+    end
+    
+    -- Hidden layer errors (simplified)
+    local hidden_errors = {}
+    for i = 1, 8 do
+        hidden_errors[i] = 0
+        for j = 1, 5 do
+            hidden_errors[i] = hidden_errors[i] + 
+                              output_errors[j] * state.network.weights.hidden_output[i][j]
+        end
+        
+        -- Only backpropagate through active neurons (ReLU derivative)
+        if state.network.activations.hidden[i] <= 0 then
+            hidden_errors[i] = 0
+        end
+        
+        -- Update hidden layer biases
+        state.network.biases.hidden[i] = state.network.biases.hidden[i] + 
+                                        hidden_errors[i] * learn_rate
+    end
+    
+    -- Update input-to-hidden weights
+    for i = 1, #inputs do
+        for j = 1, 8 do
+            state.network.weights.input_hidden[i][j] = 
+                state.network.weights.input_hidden[i][j] + 
+                inputs[i] * hidden_errors[j] * learn_rate
+        end
+    end
+end
+
+-- Record movement for pattern analysis
+local function recordMovement(x, y, dx, dy, hit, context)
+    -- Update history index
+    state.history_index = (state.history_index % learning.max_history) + 1
+    
+    -- Record movement with timestamp
+    state.movement_history[state.history_index] = {
+        x = x,
+        y = y,
+        dx = dx,
+        dy = dy,
+        t = os.clock(),
+        hit = hit,
+        context = context or {}
+    }
+    
+    -- Update hit/miss statistics
+    if hit then
+        state.metrics.hits = state.metrics.hits + 1
+    else
+        state.metrics.misses = state.metrics.misses + 1
+    end
+    
+    -- Analyze patterns periodically
+    if state.frame % 10 == 0 then
+        analyzePatterns()
+    end
+    
+    -- Update player style profile periodically
+    if state.frame % 30 == 0 then
+        updateStyleProfile()
+    end
+    
+    -- Train network periodically with recent data
+    if state.frame % 50 == 0 then
+        trainNetworkWithRecentData()
+    end
+end
+
+-- Calculate similarity between two movement sequences
+local function sequenceSimilarity(seq1, seq2)
+    local total_diff = 0
+    local count = 0
+    
+    for i = 1, math.min(#seq1, #seq2) do
+        if seq1[i].t > 0 and seq2[i].t > 0 then
+            -- Calculate normalized difference
+            local x_diff = math.abs(seq1[i].x - seq2[i].x) / (math.abs(seq1[i].x) + math.abs(seq2[i].x) + 0.001)
+            local y_diff = math.abs(seq1[i].y - seq2[i].y) / (math.abs(seq1[i].y) + math.abs(seq2[i].y) + 0.001)
+            
+            total_diff = total_diff + x_diff + y_diff
+            count = count + 2
+        end
+    end
+    
+    if count == 0 then return 0 end
+    
+    -- Return similarity (1 = identical, 0 = completely different)
+    return 1 - (total_diff / count)
+end
+
+-- Extract current movement sequence
+local function getCurrentSequence()
+    local sequence = {}
+    local idx = state.history_index
+    
+    for i = 1, learning.pattern_length do
+        idx = ((idx - 1 + learning.max_history) % learning.max_history) + 1
+        sequence[i] = {
+            x = state.movement_history[idx].x,
+            y = state.movement_history[idx].y,
+            t = state.movement_history[idx].t
+        }
+    end
+    
+    return sequence
+end
+
+-- Analyze patterns in movement history
+local function analyzePatterns()
+    -- Get current sequence
+    local current_sequence = getCurrentSequence()
+    
+    -- Check for similar existing patterns
+    local best_match = 0
+    local best_similarity = 0
+    
+    for i = 1, #state.patterns do
+        local similarity = sequenceSimilarity(current_sequence, state.patterns[i].sequence)
+        
+        if similarity > best_similarity then
+            best_similarity = similarity
+            best_match = i
+        end
+    end
+    
+    -- If we found a similar pattern, update it
+    if best_similarity > learning.pattern_threshold then
+        -- Update pattern with weighted average (slowly adapt to changes)
+        local pattern = state.patterns[best_match]
+        pattern.frequency = pattern.frequency + 1
+        pattern.last_seen = state.frame
+        
+        -- Increase confidence in this pattern
+        pattern.confidence = pattern.confidence * 0.95 + 0.05 * best_similarity
+        
+        -- Gradually update pattern
+        for i = 1, learning.pattern_length do
+            -- Weighted average to slowly adapt pattern
+            pattern.sequence[i].x = pattern.sequence[i].x * 0.9 + current_sequence[i].x * 0.1
+            pattern.sequence[i].y = pattern.sequence[i].y * 0.9 + current_sequence[i].y * 0.1
+            pattern.sequence[i].t = current_sequence[i].t
+        end
+    else
+        -- Create new pattern
+        -- Find least used pattern slot
+        local min_freq = math.huge
+        local min_idx = 1
+        
+        for i = 1, #state.patterns do
+            if state.patterns[i].frequency < min_freq then
+                min_freq = state.patterns[i].frequency
+                min_idx = i
+            end
+        end
+        
+        -- Replace least used pattern
+        state.patterns[min_idx] = {
+            sequence = current_sequence,
+            frequency = 1,
+            last_seen = state.frame,
+            confidence = 0.2  -- Initial confidence
+        }
+    end
+end
+
+-- Continuing from previous implementation...
+
+-- Update player style profile based on movement history
+local function updateStyleProfile()
+    -- Reset temporary counters
+    local counts = {
+        total_movements = 0,
+        flicks = 0,
+        precision_movements = 0,
+        tracking_movements = 0,
+        aggressive_movements = 0,
+        consistent_patterns = 0
+    }
+    
+    -- Analyze recent movement history
+    local recent_count = math.min(60, learning.max_history)
+    local idx = state.history_index
+    
+    for i = 1, recent_count do
+        idx = ((idx - 1 + learning.max_history) % learning.max_history) + 1
+        local movement = state.movement_history[idx]
+        
+        if movement.t > 0 then
+            -- Calculate movement magnitude
+            local magnitude = math.sqrt(movement.x * movement.x + movement.y * movement.y)
+            
+            counts.total_movements = counts.total_movements + 1
+            
+            -- Categorize movement
+            if magnitude > 25 then
+                counts.flicks = counts.flicks + 1
+                -- Aggressive movements are large and fast
+                if magnitude > 35 then
+                    counts.aggressive_movements = counts.aggressive_movements + 1
+                end
+            elseif magnitude > 8 then
+                -- Medium movements - could be tracking
+                counts.tracking_movements = counts.tracking_movements + 
+                    (math.sqrt(movement.dx * movement.dx + movement.dy * movement.dy) > 2 and 1 or 0.5)
+            else
+                -- Small, precise movements
+                counts.precision_movements = counts.precision_movements + 1
+            end
+        end
+    end
+    
+    -- Calculate consistency by analyzing pattern matches
+    local pattern_matches = 0
+    for i = 1, #state.patterns do
+        if state.patterns[i].frequency > 5 and state.patterns[i].confidence > 0.5 then
+            pattern_matches = pattern_matches + 1
+        end
+    end
+    counts.consistent_patterns = pattern_matches
+    
+    -- Only update if we have enough data
+    if counts.total_movements > 10 then
+        -- Update style profile with exponential moving average
+        local alpha = 0.2  -- Weight of new observation
+        
+        -- Update each style category
+        state.style_profile.precision = state.style_profile.precision * (1 - alpha) + 
+                                     alpha * (counts.precision_movements / counts.total_movements * 2 - 1)
+        
+        state.style_profile.flick = state.style_profile.flick * (1 - alpha) + 
+                                 alpha * (counts.flicks / counts.total_movements * 2 - 1)
+        
+        state.style_profile.track = state.style_profile.track * (1 - alpha) + 
+                                 alpha * (counts.tracking_movements / counts.total_movements * 2 - 1)
+        
+        state.style_profile.aggression = state.style_profile.aggression * (1 - alpha) + 
+                                      alpha * (counts.aggressive_movements / counts.total_movements * 2 - 1)
+        
+        state.style_profile.consistency = state.style_profile.consistency * (1 - alpha) + 
+                                       alpha * (math.min(1, counts.consistent_patterns / 8) * 2 - 1)
+        
+        -- Update confidence in profile
+        for _, category in ipairs(learning.style_categories) do
+            state.style_confidence[category] = state.style_confidence[category] * (1 - alpha) + alpha
+            
+            -- Clamp style values to range [-1, 1]
+            if state.style_profile[category] > 1 then state.style_profile[category] = 1 end
+            if state.style_profile[category] < -1 then state.style_profile[category] = -1 end
+        end
+    end
+end
+
+-- Train network with recent movement data
+local function trainNetworkWithRecentData()
+    -- Skip if we don't have enough data
+    if state.metrics.hits + state.metrics.misses < 10 then
+        return
+    end
+    
+    -- Collect recent successful movements (hits)
+    local successful_movements = {}
+    local idx = state.history_index
+    
+    for i = 1, learning.max_history do
+        idx = ((idx - 1 + learning.max_history) % learning.max_history) + 1
+        local movement = state.movement_history[idx]
+        
+        if movement.t > 0 and movement.hit then
+            table.insert(successful_movements, movement)
+            if #successful_movements >= 15 then break end
+        end
+    end
+    
+    -- Train on successful movements
+    for _, movement in ipairs(successful_movements) do
+        -- Create input vector for network
+        local inputs = {
+            movement.x / 50,  -- Normalized x movement
+            movement.y / 50,  -- Normalized y movement
+            movement.dx / 10, -- Normalized x derivative
+            movement.dy / 10, -- Normalized y derivative
+            math.sqrt(movement.x * movement.x + movement.y * movement.y) / 50, -- Magnitude
+            state.style_profile.precision,
+            state.style_profile.flick,
+            state.style_profile.track,
+            state.style_profile.aggression,
+            state.style_profile.consistency
+        }
+        
+        -- Create target vector
+        -- These values represent ideal adjustments to core parameters
+        local targets = {
+            0.5,  -- Smoothing adjustment
+            0.7,  -- Acceleration adjustment
+            0.6,  -- Snap assistance adjustment
+            0.8,  -- Prediction adjustment
+            0.7   -- Tracking adjustment
+        }
+        
+        -- Train network with this example
+        updateNetwork(inputs, targets, learning.learn_rate * 0.5)
+    end
+end
+
+-- Predict optimal adjustments for current state
+local function predictAdjustments(x, y, dx, dy)
+    -- Create input vector
+    local inputs = {
+        x / 50,  -- Normalized x movement
+        y / 50,  -- Normalized y movement
+        dx / 10, -- Normalized x derivative
+        dy / 10, -- Normalized y derivative
+        math.sqrt(x * x + y * y) / 50, -- Magnitude
+        state.style_profile.precision,
+        state.style_profile.flick,
+        state.style_profile.track,
+        state.style_profile.aggression,
+        state.style_profile.consistency
+    }
+    
+    -- Forward pass through network
+    local adjustments = networkForward(inputs)
+    
+    -- Convert network outputs to usable adjustments
+    local result = {
+        smoothing = adjustments[1],
+        acceleration = adjustments[2],
+        snap = adjustments[3],
+        prediction = adjustments[4],
+        tracking = adjustments[5]
+    }
+    
+    return result
+end
+
+-- Apply adaptive adjustments to aiming parameters
+local function getAdaptiveAdjustments(x, y, dx, dy)
+    -- Update frame counter
+    state.frame = state.frame + 1
+    
+    -- Get neural network predictions
+    local adjustments = predictAdjustments(x, y, dx, dy)
+    
+    -- Combine with pattern-based predictions
+    local prediction_adjustments = {
+        smoothing = 0,
+        acceleration = 0,
+        snap = 0,
+        prediction = 0,
+        tracking = 0
+    }
+    
+    -- Check for pattern matches
+    local current_sequence = getCurrentSequence()
+    local best_match = 0
+    local best_similarity = 0
+    
+    for i = 1, #state.patterns do
+        local similarity = sequenceSimilarity(current_sequence, state.patterns[i].sequence)
+        
+        if similarity > best_similarity and similarity > learning.pattern_threshold then
+            best_similarity = similarity
+            best_match = i
+        end
+    end
+    
+    -- If we found a good pattern match, adjust predictions
+    if best_match > 0 and state.patterns[best_match].confidence > 0.3 then
+        local pattern_influence = learning.pattern_weight * state.patterns[best_match].confidence
+        
+        -- Adjust based on pattern recognition
+        -- For highly consistent patterns, reduce smoothing and increase prediction
+        prediction_adjustments.smoothing = -0.2 * pattern_influence
+        prediction_adjustments.prediction = 0.3 * pattern_influence
+        prediction_adjustments.tracking = 0.3 * pattern_influence
+        
+        -- Record this pattern was used
+        state.patterns[best_match].frequency = state.patterns[best_match].frequency + 1
+        state.patterns[best_match].last_seen = state.frame
+    end
+    
+    -- Blend adjustments from neural network and pattern recognition
+    for adjustment, value in pairs(adjustments) do
+        adjustments[adjustment] = value + prediction_adjustments[adjustment]
+        
+        -- Clamp final values
+        if adjustments[adjustment] > 1 then adjustments[adjustment] = 1 end
+        if adjustments[adjustment] < -1 then adjustments[adjustment] = -1 end
+    end
+    
+    return adjustments
+end
+
+-- Record hit/miss result for learning
+local function recordResult(hit)
+    local idx = state.history_index
+    if idx > 0 and idx <= learning.max_history then
+        state.movement_history[idx].hit = hit
+    end
+    
+    -- Update metrics
+    if hit then
+        state.metrics.hits = state.metrics.hits + 1
+    else
+        state.metrics.misses = state.metrics.misses + 1
+    end
+    
+    -- Update hit rate
+    local total = state.metrics.hits + state.metrics.misses
+    if total > 0 then
+        learning.metrics.hit_rate = state.metrics.hits / total
+    end
+}
+
+-- Module initialization
+local function initialize()
+    -- Initialize neural network
+    initializeNetwork()
+    
+    -- Set initialization timestamp
+    state.last_update = os.clock()
+    state.initialized = true
+    
+    -- Return success
+    return true
+end
+
+-- Main update function
+function OnUpdate(dt)
+    if not state.initialized then
+        initialize()
+    end
+    
+    -- Update frame counter
+    state.frame = state.frame + 1
+    
+    -- Perform periodic updates
+    if state.frame % 50 == 0 then
+        -- Decay pattern frequencies
+        for i = 1, #state.patterns do
+            state.patterns[i].frequency = state.patterns[i].frequency * learning.memory_decay
+        end
+    end
+    
+    -- Return active status
+    return state.active
+end
+
+-- Public interface
+local function getStyleProfile()
+    return state.style_profile
+end
+
+local function resetLearning()
+    -- Reset patterns
+    for i = 1, #state.patterns do
+        state.patterns[i].frequency = 0
+        state.patterns[i].confidence = 0
+    end
+    
+    -- Reset style profile
+    for _, category in ipairs(learning.style_categories) do
+        state.style_profile[category] = 0
+        state.style_confidence[category] = 0
+    end
+    
+    -- Reset metrics
+    state.metrics.hits = 0
+    state.metrics.misses = 0
+    
+    return true
+end
+
+-- Register module with the system
+SYSTEM_MODULE.initialized = initialize()
+
+-- Export public interface
+return {
+    name = SYSTEM_MODULE.name,
+    version = SYSTEM_MODULE.version,
+    
+    -- Public functions
+    initialize = initialize,
+    update = OnUpdate,
+    
+    -- Learning interface
+    recordMovement = recordMovement,
+    recordResult = recordResult,
+    getAdjustments = getAdaptiveAdjustments,
+    getStyleProfile = getStyleProfile,
+    resetLearning = resetLearning
+}

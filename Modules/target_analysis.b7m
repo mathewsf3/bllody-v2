@@ -1,0 +1,857 @@
+-- =====================================================
+-- CS2 Target Analysis Module (APEX EDITION)
+-- Date: 2025-04-14 17:09:05
+-- User: mathewsf3
+-- Version: 5.0.0 APEX
+-- =====================================================
+
+-- This module specializes in real-time analysis of potential targets
+-- Identifies high-value targets, predicts movement patterns, and prioritizes threats
+-- Uses advanced statistical models to improve hit probability
+
+-- Module metadata (for detection evasion)
+local MODULE_INFO = {
+    name = "Resource Optimization Framework",
+    version = "2.8.5",
+    build = "20250414-1709",
+    signature = "3af826c901e47d5b",
+    activated = false
+}
+
+-- Target analysis configuration
+local config = {
+    -- Core analysis parameters
+    analysis_frequency = 3,       -- Analyze every N frames (performance optimization)
+    max_targets = 16,             -- Maximum number of targets to track simultaneously
+    prediction_horizon = 450,     -- How far ahead to predict movements (ms)
+    confidence_threshold = 0.65,  -- Minimum confidence for target acquisition
+    
+    -- Target prioritization weights
+    priority_weights = {
+        distance = 0.3,           -- Closer targets get higher priority
+        movement = 0.2,           -- Moving targets get higher priority
+        size = 0.15,              -- Larger targets get higher priority
+        threat = 0.35,            -- Threatening targets get higher priority
+    },
+    
+    -- Movement prediction parameters
+    prediction = {
+        linear_weight = 0.55,     -- Weight of linear prediction
+        pattern_weight = 0.30,    -- Weight of pattern-based prediction
+        adaptive_weight = 0.15,   -- Weight of adaptive learning prediction
+        
+        max_history = 32,         -- Maximum movement history per target
+        pattern_threshold = 0.75, -- Similarity threshold for pattern recognition
+        
+        velocity_decay = 0.92,    -- How quickly velocity prediction decays
+        acceleration_factor = 1.2, -- Acceleration multiplier for prediction
+    },
+    
+    -- Target visibility and occlusion handling
+    visibility = {
+        occlusion_prediction = true,  -- Predict targets behind obstacles
+        extrapolation_time = 800,     -- Maximum time to extrapolate invisible targets (ms)
+        reacquisition_boost = 0.28,   -- Boost factor when reacquiring recently seen targets
+    },
+    
+    -- Integration with other modules
+    integration = {
+        adaptive_learning = true,     -- Use adaptive learning data
+        precision_core = true,        -- Integrate with precision core
+        context_awareness = true,     -- Use contextual information
+    }
+}
+
+-- Runtime state
+local state = {
+    -- Target tracking
+    targets = {},                 -- Array of tracked targets
+    active_target = nil,          -- Currently selected target
+    last_acquisition = 0,         -- Time of last target acquisition
+    
+    -- Analysis state
+    frame = 0,                    -- Current frame counter
+    last_analysis = 0,            -- Time of last analysis
+    
+    -- Performance tracking
+    metrics = {
+        hit_rate = 0,             -- Successful hits / total attempts
+        acquisition_time = 0,     -- Average time to acquire targets
+        prediction_accuracy = 0,  -- Accuracy of movement predictions
+    },
+    
+    -- Pattern database
+    movement_patterns = {},       -- Database of recognized movement patterns
+    
+    -- Statistical models (simplified)
+    models = {
+        position_variance = 0,    -- Statistical variance in position prediction
+        velocity_variance = 0,    -- Statistical variance in velocity prediction
+        confidence_values = {},   -- Confidence values for different prediction methods
+    },
+    
+    -- Context awareness
+    context = {
+        map_name = "",            -- Current map
+        area_name = "",           -- Current area in map
+        weapon_type = "",         -- Current weapon type
+        engagement_type = "",     -- Current engagement type (close, medium, long)
+    }
+}
+
+-- Initialize target array
+for i = 1, config.max_targets do
+    state.targets[i] = {
+        id = 0,                   -- Target identifier
+        active = false,           -- Whether target is currently active
+        position = {x=0, y=0, z=0}, -- Current position
+        velocity = {x=0, y=0, z=0}, -- Current velocity
+        acceleration = {x=0, y=0, z=0}, -- Current acceleration
+        size = 0,                 -- Target size
+        distance = 0,             -- Distance to player
+        priority = 0,             -- Target priority
+        threat_level = 0,         -- Threat assessment
+        first_seen = 0,           -- When target was first detected
+        last_seen = 0,            -- When target was last detected
+        visible = false,          -- Whether target is currently visible
+        confidence = 0,           -- Confidence in target tracking
+        hit_probability = 0,      -- Probability of successful hit
+        history = {},             -- Position history
+        prediction = {            -- Predicted values
+            position = {x=0, y=0, z=0},
+            velocity = {x=0, y=0, z=0},
+            time = 0,             -- Prediction timestamp
+            confidence = 0,       -- Prediction confidence
+        },
+        pattern = {               -- Movement pattern data
+            id = 0,               -- Identified pattern ID
+            confidence = 0,       -- Pattern match confidence
+            cycle_time = 0,       -- Pattern cycle time
+        }
+    }
+    
+    -- Initialize position history
+    for j = 1, config.prediction.max_history do
+        state.targets[i].history[j] = {
+            position = {x=0, y=0, z=0},
+            velocity = {x=0, y=0, z=0},
+            time = 0,
+        }
+    end
+end
+
+-- Initialize movement patterns database
+for i = 1, 16 do
+    state.movement_patterns[i] = {
+        id = i,
+        frequency = 0,            -- How often this pattern appears
+        points = {},              -- Pattern keypoints
+        cycle_time = 0,           -- Pattern cycle time
+        last_seen = 0,            -- When pattern was last seen
+        confidence = 0,           -- Pattern recognition confidence
+    }
+    
+    -- Initialize pattern points
+    for j = 1, 8 do
+        state.movement_patterns[i].points[j] = {
+            position = {x=0, y=0, z=0},
+            velocity = {x=0, y=0, z=0},
+            time_offset = 0,      -- Time offset within pattern
+        }
+    end
+end
+
+-- Initialize confidence values
+state.models.confidence_values = {
+    linear = 0.7,                 -- Default confidence in linear prediction
+    pattern = 0.5,                -- Default confidence in pattern prediction
+    adaptive = 0.6,               -- Default confidence in adaptive prediction
+}
+
+-- Utility Functions --
+
+-- Vector operations
+local function vecAdd(v1, v2)
+    return {x = v1.x + v2.x, y = v1.y + v2.y, z = v1.z + v2.z}
+end
+
+local function vecSubtract(v1, v2)
+    return {x = v1.x - v2.x, y = v1.y - v2.y, z = v1.z - v2.z}
+end
+
+local function vecScale(v, scale)
+    return {x = v.x * scale, y = v.y * scale, z = v.z * scale}
+end
+
+local function vecLength(v)
+    return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+end
+
+local function vecDistance(v1, v2)
+    return vecLength(vecSubtract(v1, v2))
+end
+
+-- Statistical functions
+local function calculateMean(values)
+    local sum = 0
+    local count = 0
+    
+    for _, value in ipairs(values) do
+        if value ~= 0 then
+            sum = sum + value
+            count = count + 1
+        end
+    end
+    
+    if count == 0 then return 0 end
+    return sum / count
+end
+
+local function calculateVariance(values, mean)
+    local sum = 0
+    local count = 0
+    
+    for _, value in ipairs(values) do
+        if value ~= 0 then
+            sum = sum + (value - mean) * (value - mean)
+            count = count + 1
+        end
+    end
+    
+    if count < 2 then return 0 end
+    return sum / (count - 1)
+}
+
+-- Core Target Analysis Functions --
+
+-- Update target information with new data
+local function updateTarget(targetId, position, size, visible, threatLevel)
+    -- Find or create target
+    local target = nil
+    local targetIndex = 0
+    
+    -- Look for existing target with this ID
+    for i, t in ipairs(state.targets) do
+        if t.active and t.id == targetId then
+            target = t
+            targetIndex = i
+            break
+        end
+    }
+    
+    -- If not found, find inactive slot
+    if not target then
+        for i, t in ipairs(state.targets) do
+            if not t.active then
+                target = t
+                targetIndex = i
+                
+                -- Initialize new target
+                target.id = targetId
+                target.active = true
+                target.first_seen = os.clock()
+                target.confidence = 0.2 -- Initial confidence
+                
+                -- Reset history
+                for j = 1, config.prediction.max_history do
+                    target.history[j] = {
+                        position = {x=0, y=0, z=0},
+                        velocity = {x=0, y=0, z=0},
+                        time = 0,
+                    }
+                end
+                
+                break
+            end
+        end
+    }
+    
+    -- If no slots available, don't update
+    if not target then
+        return nil
+    end
+    
+    -- Calculate time delta
+    local currentTime = os.clock()
+    local lastTime = target.last_seen
+    local dt = currentTime - lastTime
+    
+    -- If this is first update or long time passed, reset velocity
+    if lastTime == 0 or dt > 1.0 then
+        dt = 0.016 -- Assume one frame
+        target.velocity = {x=0, y=0, z=0}
+        target.acceleration = {x=0, y=0, z=0}
+    end
+    
+    -- Calculate new velocity
+    local newVelocity = {
+        x = (position.x - target.position.x) / dt,
+        y = (position.y - target.position.y) / dt,
+        z = (position.z - target.position.z) / dt
+    }
+    
+    -- Calculate new acceleration
+    local newAcceleration = {
+        x = (newVelocity.x - target.velocity.x) / dt,
+        y = (newVelocity.y - target.velocity.y) / dt,
+        z = (newVelocity.z - target.velocity.z) / dt
+    }
+    
+    -- Apply smoothing to velocity and acceleration
+    local velocitySmoothing = 0.8
+    local accelerationSmoothing = 0.6
+    
+    target.velocity = {
+        x = target.velocity.x * (1 - velocitySmoothing) + newVelocity.x * velocitySmoothing,
+        y = target.velocity.y * (1 - velocitySmoothing) + newVelocity.y * velocitySmoothing,
+        z = target.velocity.z * (1 - velocitySmoothing) + newVelocity.z * velocitySmoothing
+    }
+    
+    target.acceleration = {
+        x = target.acceleration.x * (1 - accelerationSmoothing) + newAcceleration.x * accelerationSmoothing,
+        y = target.acceleration.y * (1 - accelerationSmoothing) + newAcceleration.y * accelerationSmoothing,
+        z = target.acceleration.z * (1 - accelerationSmoothing) + newAcceleration.z * accelerationSmoothing
+    }
+    
+    -- Update target properties
+    target.position = position
+    target.size = size
+    target.visible = visible
+    target.threat_level = threatLevel
+    target.last_seen = currentTime
+    
+    -- Update position history (circular buffer)
+    local historyIndex = target.last_seen % config.prediction.max_history + 1
+    target.history[historyIndex] = {
+        position = position,
+        velocity = target.velocity,
+        time = currentTime
+    }
+    
+    -- Update confidence based on tracking consistency
+    target.confidence = math.min(1.0, target.confidence + 0.05)
+    
+    -- Calculate distance (assuming player at origin for simplicity)
+    target.distance = vecLength(position)
+    
+    -- Calculate priority based on weighted factors
+    target.priority = 
+        config.priority_weights.distance * (1.0 - math.min(1.0, target.distance / 1000)) +
+        config.priority_weights.movement * math.min(1.0, vecLength(target.velocity) / 10) +
+        config.priority_weights.size * math.min(1.0, target.size / 50) +
+        config.priority_weights.threat * target.threat_level
+    
+    -- Predict target movement
+    predictTargetMovement(target)
+    
+    -- Identify movement patterns
+    identifyMovementPattern(target)
+    
+    -- Calculate hit probability
+    calculateHitProbability(target)
+    
+    return target
+}
+
+-- Predict future target position
+local function predictTargetMovement(target)
+    -- Skip if target data insufficient
+    if target.last_seen == 0 or not target.active then
+        return
+    end
+    
+    local currentTime = os.clock()
+    local predictionTime = currentTime + (config.prediction_horizon / 1000)
+    local dt = predictionTime - target.last_seen
+    
+    -- Linear prediction (physics-based)
+    local linearPrediction = {
+        x = target.position.x + target.velocity.x * dt + 0.5 * target.acceleration.x * dt * dt,
+        y = target.position.y + target.velocity.y * dt + 0.5 * target.acceleration.y * dt * dt,
+        z = target.position.z + target.velocity.z * dt + 0.5 * target.acceleration.z * dt * dt
+    }
+    
+    -- Pattern-based prediction
+    local patternPrediction = {x = 0, y = 0, z = 0}
+    local patternConfidence = 0
+    
+    if target.pattern.confidence > 0.5 and target.pattern.id > 0 then
+        local pattern = state.movement_patterns[target.pattern.id]
+        if pattern then
+            -- Calculate position in pattern cycle
+            local patternTime = (currentTime % target.pattern.cycle_time) / target.pattern.cycle_time
+            
+            -- Find closest pattern points
+            local prev_idx = 1
+            local next_idx = 1
+            local prev_time = 0
+            local next_time = 1
+            
+            for i = 1, #pattern.points do
+                local point_time = pattern.points[i].time_offset / target.pattern.cycle_time
+                if point_time <= patternTime and point_time > prev_time then
+                    prev_idx = i
+                    prev_time = point_time
+                end
+                if point_time > patternTime and point_time < next_time then
+                    next_idx = i
+                    next_time = point_time
+                end
+            end
+            
+            -- Interpolate between points
+            local prev_point = pattern.points[prev_idx]
+            local next_point = pattern.points[next_idx]
+            
+            -- Avoid division by zero
+            local blend = 0.5
+            if next_time > prev_time then
+                blend = (patternTime - prev_time) / (next_time - prev_time)
+            end
+            
+            -- Calculate predicted position
+            local offset = {
+                x = prev_point.position.x * (1 - blend) + next_point.position.x * blend,
+                y = prev_point.position.y * (1 - blend) + next_point.position.y * blend,
+                z = prev_point.position.z * (1 - blend) + next_point.position.z * blend
+            }
+            
+            patternPrediction = vecAdd(target.position, offset)
+            patternConfidence = target.pattern.confidence
+        end
+    end
+    
+    -- Weighted combination of predictions
+    local totalWeight = 
+        config.prediction.linear_weight * state.models.confidence_values.linear +
+        config.prediction.pattern_weight * patternConfidence * state.models.confidence_values.pattern +
+        config.prediction.adaptive_weight * state.models.confidence_values.adaptive
+    
+    -- Default to linear if no confidence
+    if totalWeight < 0.1 then
+        target.prediction.position = linearPrediction
+        target.prediction.confidence = state.models.confidence_values.linear
+    else
+        -- Weighted combination
+        target.prediction.position = {
+            x = (linearPrediction.x * config.prediction.linear_weight * state.models.confidence_values.linear + 
+                patternPrediction.x * config.prediction.pattern_weight * patternConfidence * state.models.confidence_values.pattern) / totalWeight,
+            y = (linearPrediction.y * config.prediction.linear_weight * state.models.confidence_values.linear + 
+                patternPrediction.y * config.prediction.pattern_weight * patternConfidence * state.models.confidence_values.pattern) / totalWeight,
+            z = (linearPrediction.z * config.prediction.linear_weight * state.models.confidence_values.linear + 
+                patternPrediction.z * config.prediction.pattern_weight * patternConfidence * state.models.confidence_values.pattern) / totalWeight
+        }
+        
+        target.prediction.confidence = totalWeight
+    }
+    
+    -- Predicted velocity is weighted by decay factor
+    target.prediction.velocity = vecScale(target.velocity, config.prediction.velocity_decay)
+    target.prediction.time = predictionTime
+}
+
+-- Identify movement patterns
+local function identifyMovementPattern(target)
+    -- Skip if not enough history
+    if target.first_seen == 0 or target.last_seen - target.first_seen < 1.0 then
+        return
+    end
+    
+    -- Extract movement history into normalized form
+    local history = {}
+    local basePosition = target.position
+    local validPoints = 0
+    
+    for i = 1, config.prediction.max_history do
+        if target.history[i].time > 0 then
+            table.insert(history, {
+                position = vecSubtract(target.history[i].position, basePosition),
+                velocity = target.history[i].velocity,
+                time = target.history[i].time
+            })
+            validPoints = validPoints + 1
+        end
+    end
+    
+    -- Need enough points for pattern analysis
+    if validPoints < 8 then
+        return
+    end
+    
+    -- Look for existing patterns
+    local bestMatchPattern = 0
+    local bestMatchScore = 0
+    
+    for i, pattern in ipairs(state.movement_patterns) do
+        if pattern.frequency > 0 then
+            -- Calculate similarity score
+            local similarityScore = 0
+            local pointsCompared = 0
+            
+            for j, historyPoint in ipairs(history) do
+                -- Find closest pattern point
+                local bestDistance = 99999
+                local bestPatternPoint = nil
+                
+                for k, patternPoint in ipairs(pattern.points) do
+                    local distance = vecLength(vecSubtract(historyPoint.position, patternPoint.position))
+                    if distance < bestDistance then
+                        bestDistance = distance
+                        bestPatternPoint = patternPoint
+                    end
+                end
+                
+                if bestPatternPoint then
+                    -- Calculate similarity based on position and velocity
+                    local positionSimilarity = 1.0 / (1.0 + bestDistance)
+                    local velocitySimilarity = 1.0 / (1.0 + vecLength(vecSubtract(historyPoint.velocity, bestPatternPoint.velocity)))
+                    
+                    -- Weighted combination
+                    similarityScore = similarityScore + (positionSimilarity * 0.7 + velocitySimilarity * 0.3)
+                    pointsCompared = pointsCompared + 1
+                end
+            end
+            
+            if pointsCompared > 0 then
+                similarityScore = similarityScore / pointsCompared
+                
+                if similarityScore > bestMatchScore and similarityScore > config.prediction.pattern_threshold then
+                    bestMatchScore = similarityScore
+                    bestMatchPattern = i
+                end
+            end
+        end
+    end
+    
+    -- If we found a matching pattern
+    if bestMatchPattern > 0 then
+        -- Update target pattern info
+        target.pattern.id = bestMatchPattern
+        target.pattern.confidence = bestMatchScore
+        target.pattern.cycle_time = state.movement_patterns[bestMatchPattern].cycle_time
+        
+        -- Update pattern stats
+        state.movement_patterns[bestMatchPattern].frequency = state.movement_patterns[bestMatchPattern].frequency + 1
+        state.movement_patterns[bestMatchPattern].last_seen = os.clock()
+        
+        -- Gradually update pattern with new observations
+        local pattern = state.movement_patterns[bestMatchPattern]
+        local updateWeight = 0.1 -- Gradual adaptation
+        
+        -- Update pattern points (gradually)
+        for i, historyPoint in ipairs(history) do
+            -- Find closest pattern point
+            local bestDistance = 99999
+            local bestPatternIndex = 1
+            
+            for j, patternPoint in ipairs(pattern.points) do
+                local distance = vecLength(vecSubtract(historyPoint.position, patternPoint.position))
+                if distance < bestDistance then
+                    bestDistance = distance
+                    bestPatternIndex = j
+                end
+            end
+            
+            -- Update pattern point with weighted average
+            pattern.points[bestPatternIndex].position = {
+                x = pattern.points[bestPatternIndex].position.x * (1 - updateWeight) + historyPoint.position.x * updateWeight,
+                y = pattern.points[bestPatternIndex].position.y * (1 - updateWeight) + historyPoint.position.y * updateWeight,
+                z = pattern.points[bestPatternIndex].position.z * (1 - updateWeight) + historyPoint.position.z * updateWeight
+            }
+            
+            pattern.points[bestPatternIndex].velocity = {
+                x = pattern.points[bestPatternIndex].velocity.x * (1 - updateWeight) + historyPoint.velocity.x * updateWeight,
+                y = pattern.points[bestPatternIndex].velocity.y * (1 - updateWeight) + historyPoint.velocity.y * updateWeight,
+                z = pattern.points[bestPatternIndex].velocity.z * (1 - updateWeight) + historyPoint.velocity.z * updateWeight
+            }
+        }
+    else
+        -- No matching pattern found, create new pattern if target moves significantly
+        local movementMagnitude = 0
+        
+        for i = 2, #history do
+            if history[i].time > 0 and history[i-1].time > 0 then
+                movementMagnitude = movementMagnitude + vecLength(vecSubtract(history[i].position, history[i-1].position))
+            end
+        end
+        
+        -- Only create pattern if significant movement
+        if movementMagnitude > 50 then
+            -- Find least used pattern slot
+            local leastUsedIndex = 1
+            local leastUsedFrequency = state.movement_patterns[1].frequency
+            
+            for i, pattern in ipairs(state.movement_patterns) do
+                if pattern.frequency < leastUsedFrequency then
+                    leastUsedIndex = i
+                    leastUsedFrequency = pattern.frequency
+                end
+            end
+            
+            -- Create new pattern
+            local newPattern = state.movement_patterns[leastUsedIndex]
+            newPattern.frequency = 1
+            newPattern.last_seen = os.clock()
+            newPattern.cycle_time = target.last_seen - target.first_seen
+            
+            -- Sample points from history
+            local samplesNeeded = #newPattern.points
+            local step = #history / samplesNeeded
+            
+            for i = 1, samplesNeeded do
+                local historyIndex = math.floor((i - 1) * step) + 1
+                if historyIndex <= #history then
+                    newPattern.points[i].position = history[historyIndex].position
+                    newPattern.points[i].velocity = history[historyIndex].velocity
+                    newPattern.points[i].time_offset = 
+                        (history[historyIndex].time - target.first_seen) / newPattern.cycle_time
+                end
+            end
+            
+            -- Set target pattern to new pattern
+            target.pattern.id = leastUsedIndex
+            target.pattern.confidence = 0.5  -- Initial confidence
+            target.pattern.cycle_time = newPattern.cycle_time
+        end
+    end
+}
+
+-- Calculate hit probability
+local function calculateHitProbability(target)
+    -- Base probability depends on distance, size, and movement
+    local distanceFactor = 1.0 - math.min(1.0, target.distance / 1000)
+    local sizeFactor = math.min(1.0, target.size / 50)
+    local movementFactor = 1.0 - math.min(1.0, vecLength(target.velocity) / 20)
+    
+    -- Prediction confidence factor
+    local predictionFactor = target.prediction.confidence
+    
+    -- Target visibility factor
+    local visibilityFactor = target.visible and 1.0 or 0.5
+    
+    -- Calculate overall probability
+    target.hit_probability = 
+        (distanceFactor * 0.3 + 
+         sizeFactor * 0.2 + 
+         movementFactor * 0.2 + 
+         predictionFactor * 0.2 + 
+         visibilityFactor * 0.1) *
+        target.confidence
+}
+
+-- Select highest priority target
+local function selectTarget()
+    local bestTarget = nil
+    local bestPriority = 0
+    
+    for _, target in ipairs(state.targets) do
+        if target.active and 
+           (target.visible or 
+            (config.visibility.occlusion_prediction and 
+             os.clock() - target.last_seen < config.visibility.extrapolation_time / 1000)) then
+            
+            -- Calculate effective priority
+            local effectivePriority = target.priority * target.hit_probability
+            
+            -- Give boost to current target for stability
+            if state.active_target and target.id == state.active_target.id then
+                effectivePriority = effectivePriority * 1.2
+            end
+            
+            -- Reacquisition boost for recently lost targets
+            if not target.visible and 
+               target.last_seen > 0 and 
+               os.clock() - target.last_seen < 0.5 then
+                effectivePriority = effectivePriority * (1 + config.visibility.reacquisition_boost)
+            end
+            
+            if effectivePriority > bestPriority then
+                bestTarget = target
+                bestPriority = effectivePriority
+            end
+        end
+    end
+    
+    -- Update active target
+    if bestTarget then
+        state.active_target = bestTarget
+        state.last_acquisition = os.clock()
+    else
+        state.active_target = nil
+    end
+    
+    return state.active_target
+}
+
+-- Main target analysis function
+local function analyzeTargets()
+    -- Update frame counter
+    state.frame = state.frame + 1
+    
+    -- Only run full analysis periodically for performance
+    if state.frame % config.analysis_frequency ~= 0 then
+        return state.active_target
+    end
+    
+    -- Update last analysis time
+    state.last_analysis = os.clock()
+    
+    -- Expire old targets
+    for _, target in ipairs(state.targets) do
+        if target.active and os.clock() - target.last_seen > config.visibility.extrapolation_time / 1000 then
+            target.active = false
+            target.confidence = 0
+        end
+    end
+    
+    -- Update confidence in prediction methods based on performance
+    updatePredictionConfidence()
+    
+    -- Select best target
+    return selectTarget()
+}
+
+-- Update confidence in prediction methods
+local function updatePredictionConfidence()
+    -- Skip if not enough data
+    if state.frame < 100 then
+        return
+    end
+    
+    -- Calculate prediction error for each method
+    local errors = {
+        linear = {},
+        pattern = {},
+        adaptive = {}
+    }
+    
+    -- Collect recent prediction errors
+    for _, target in ipairs(state.targets) do
+        if target.active and target.last_seen > target.prediction.time then
+            -- Actual vs predicted position
+            local actualPosition = target.position
+            local linearPredicted = {
+                x = target.history[1].position.x + target.history[1].velocity.x * (target.last_seen - target.history[1].time),
+                y = target.history[1].position.y + target.history[1].velocity.y * (target.last_seen - target.history[1].time),
+                z = target.history[1].position.z + target.history[1].velocity.z * (target.last_seen - target.history[1].time)
+            }
+            
+            -- Calculate error
+            local linearError = vecDistance(actualPosition, linearPredicted)
+            table.insert(errors.linear, linearError)
+            
+            -- Pattern and adaptive errors would be calculated similarly if available
+        end
+    end
+    
+    -- Update confidence based on mean error
+    for method, errorList in pairs(errors) do
+        if #errorList > 0 then
+            local meanError = calculateMean(errorList)
+            if meanError > 0 then
+                -- Convert error to confidence (inverse relationship)
+                local newConfidence = 1.0 / (1.0 + meanError / 50)
+                
+                -- Update with exponential smoothing
+                state.models.confidence_values[method] = 
+                    state.models.confidence_values[method] * 0.9 + newConfidence * 0.1
+            end
+        end
+    end
+}
+
+-- Get optimal aim point for current target
+local function getOptimalAimPoint(headshot_ratio)
+    if not state.active_target then
+        return nil
+    end
+    
+    local target = state.active_target
+    
+    -- Default to prediction position
+    local basePosition = target.prediction.position
+    
+    -- Determine head vs body aim based on provided ratio
+    local isHeadshot = math.random() < (headshot_ratio or 0.3)
+    
+    -- Apply vertical offset for head/body targeting
+    local verticalOffset = isHeadshot and -12 or 16
+    
+    -- Create aim point
+    local aimPoint = {
+        x = basePosition.x,
+        y = basePosition.y,
+        z = basePosition.z + verticalOffset
+    }
+    
+    -- Add slight randomization for natural appearance
+    local randomFactor = 0.2 * (1.0 - target.hit_probability)
+    aimPoint.x = aimPoint.x + (math.random() - 0.5) * randomFactor
+    aimPoint.y = aimPoint.y + (math.random() - 0.5) * randomFactor
+    aimPoint.z = aimPoint.z + (math.random() - 0.5) * randomFactor
+    
+    return {
+        position = aimPoint,
+        is_headshot = isHeadshot,
+        confidence = target.hit_probability,
+        distance = target.distance
+    }
+}
+
+-- Module interface
+local function initialize()
+    -- Reset all state
+    state.frame = 0
+    state.last_analysis = 0
+    state.active_target = nil
+    state.last_acquisition = 0
+    
+    -- Reset targets
+    for i = 1, config.max_targets do
+        state.targets[i].active = false
+        state.targets[i].id = 0
+        state.targets[i].confidence = 0
+        state.targets[i].first_seen = 0
+        state.targets[i].last_seen = 0
+    end
+    
+    -- Reset patterns
+    for i = 1, #state.movement_patterns do
+        state.movement_patterns[i].frequency = 0
+        state.movement_patterns[i].confidence = 0
+        state.movement_patterns[i].last_seen = 0
+    end
+    
+    MODULE_INFO.activated = true
+    return true
+}
+
+-- Module update function
+function OnUpdate()
+    if not MODULE_INFO.activated then
+        initialize()
+    end
+    
+    -- Basic update - just increment frame counter
+    state.frame = state.frame + 1
+    
+    return true
+}
+
+-- Export module interface
+return {
+    name = MODULE_INFO.name,
+    version = MODULE_INFO.version,
+    
+    -- Core functions
+    initialize = initialize,
+    update = OnUpdate,
+    
+    -- Target analysis interface
+    updateTarget = updateTarget,
+    analyzeTargets = analyzeTargets,
+    getOptimalAimPoint = getOptimalAimPoint,
+    
+    -- Export module info for anti-detection
+    info = function() return MODULE_INFO end
+}

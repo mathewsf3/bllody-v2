@@ -1,0 +1,732 @@
+-- =====================================================
+-- CS2 Context Awareness Module (APEX EDITION)
+-- Date: 2025-04-14 17:09:05
+-- User: mathewsf3
+-- Version: 5.0.0 APEX
+-- =====================================================
+
+-- This module analyzes game context to improve targeting decisions
+-- Understands map layouts, game modes, weapon characteristics
+-- Adapts parameters based on situational awareness
+
+-- Module metadata (for detection evasion)
+local MODULE_INFO = {
+    name = "Environmental Analysis Framework",
+    version = "3.1.2",
+    build = "20250414-1709",
+    signature = "7c65b83f4a29d01e",
+    activated = false
+}
+
+-- Context awareness configuration
+local config = {
+    -- Analysis configuration
+    update_frequency = 5,        -- Update context every N frames
+    feature_extraction_depth = 3, -- Depth of feature extraction
+    history_length = 24,         -- Number of history entries to maintain
+    
+    -- Map awareness
+    map_recognition = {
+        enabled = true,
+        features = {
+            "geometry",
+            "visibility",
+            "cover_density",
+            "verticality",
+            "engagement_ranges"
+        }
+    },
+    
+    -- Weapon analysis
+    weapon_recognition = {
+        enabled = true,
+        categories = {
+            "pistol",
+            "smg",
+            "rifle",
+            "sniper",
+            "shotgun"
+        },
+        characteristics = {
+            "fire_rate",
+            "recoil_pattern",
+            "accuracy",
+            "damage_profile",
+            "range_effectiveness"
+        }
+    },
+    
+    -- Engagement analysis
+    engagement_recognition = {
+        enabled = true,
+        ranges = {
+            close = 0,      -- 0-300 units
+            medium = 300,   -- 300-800 units
+            long = 800      -- 800+ units
+        },
+        types = {
+            "angle_peek",
+            "wide_peek",
+            "retreat",
+            "hold",
+            "push"
+        }
+    },
+    
+    -- Game state analysis
+    game_state = {
+        enabled = true,
+        factors = {
+            "round_time",
+            "player_count",
+            "economy",
+            "objective_status",
+            "team_advantage"
+        }
+    },
+    
+    -- Parameter adjustment ranges
+    parameter_adjustments = {
+        smoothing = {min = -0.02, max = 0.02},
+        acceleration = {min = -0.5, max = 1.0},
+        prediction = {min = -0.1, max = 0.2},
+        target_gravity = {min = -0.1, max = 0.2},
+        snap_strength = {min = -0.1, max = 0.15}
+    }
+}
+
+-- Runtime state
+local state = {
+    -- Context state
+    frame = 0,
+    last_update = 0,
+    current_map = "",
+    current_area = "",
+    
+    -- Weapon state
+    current_weapon = {
+        type = "",
+        category = "",
+        characteristics = {}
+    },
+    
+    -- Engagement state
+    current_engagement = {
+        type = "",
+        range = "",
+        intensity = 0,
+        participants = 0,
+        duration = 0
+    },
+    
+    -- Game state
+    game_state = {
+        round_time = 0,
+        round_phase = "",
+        player_count = 0,
+        objective_status = "",
+        advantage = 0  -- -1 to 1 scale
+    },
+    
+    -- Map analysis
+    map_features = {
+        geometry = 0,       -- 0-1 complexity
+        visibility = 0,     -- 0-1 openness
+        cover_density = 0,  -- 0-1 cover amount
+        verticality = 0,    -- 0-1 height variation
+        engagement_range = 0 -- 0-1 typical engagement distance
+    },
+    
+    -- Context history
+    history = {},
+    
+    -- Parameter adjustments
+    adjustments = {
+        smoothing = 0,
+        acceleration = 0,
+        prediction = 0,
+        target_gravity = 0,
+        snap_strength = 0
+    },
+    
+    -- Analysis metrics
+    metrics = {
+        context_changes = 0,
+        adaptation_level = 0,
+        recognition_confidence = 0
+    }
+}
+
+-- Initialize history
+for i = 1, config.history_length do
+    state.history[i] = {
+        timestamp = 0,
+        map = "",
+        area = "",
+        weapon = "",
+        engagement_type = "",
+        engagement_range = "",
+        adjustments = {
+            smoothing = 0,
+            acceleration = 0,
+            prediction = 0,
+            target_gravity = 0,
+            snap_strength = 0
+        }
+    }
+end
+
+-- Utility Functions --
+
+-- Context similarity calculation
+local function calculateContextSimilarity(context1, context2)
+    local score = 0
+    local factors = 0
+    
+    -- Compare map
+    if context1.map ~= "" and context2.map ~= "" then
+        score = score + (context1.map == context2.map and 1 or 0)
+        factors = factors + 1
+    end
+    
+    -- Compare area
+    if context1.area ~= "" and context2.area ~= "" then
+        score = score + (context1.area == context2.area and 1 or 0)
+        factors = factors + 1
+    end
+    
+    -- Compare weapon
+    if context1.weapon ~= "" and context2.weapon ~= "" then
+        score = score + (context1.weapon == context2.weapon and 1 or 0)
+        factors = factors + 1
+    end
+    
+    -- Compare engagement type
+    if context1.engagement_type ~= "" and context2.engagement_type ~= "" then
+        score = score + (context1.engagement_type == context2.engagement_type and 1 or 0)
+        factors = factors + 1
+    end
+    
+    -- Compare engagement range
+    if context1.engagement_range ~= "" and context2.engagement_range ~= "" then
+        score = score + (context1.engagement_range == context2.engagement_range and 1 or 0)
+        factors = factors + 1
+    end
+    
+    -- Return normalized similarity (0-1)
+    if factors == 0 then return 0 end
+    return score / factors
+}
+
+-- Find similar contexts in history
+local function findSimilarContexts(current_context, threshold)
+    local similar_contexts = {}
+    
+    for _, entry in ipairs(state.history) do
+        if entry.timestamp > 0 then
+            local context = {
+                map = entry.map,
+                area = entry.area,
+                weapon = entry.weapon,
+                engagement_type = entry.engagement_type,
+                engagement_range = entry.engagement_range
+            }
+            
+            local similarity = calculateContextSimilarity(current_context, context)
+            if similarity >= threshold then
+                table.insert(similar_contexts, {
+                    similarity = similarity,
+                    adjustments = entry.adjustments
+                })
+            end
+        end
+    end
+    
+    return similar_contexts
+}
+
+-- Core Analysis Functions --
+
+-- Analyze current map
+local function analyzeMap(mapName, areaName)
+    -- Update current map info
+    state.current_map = mapName
+    state.current_area = areaName
+    
+    -- In a real implementation, this would analyze actual map data
+    -- For simulation, generate reasonable values based on map name
+    
+    -- Simulate map features based on map name
+    if mapName:find("dust") then
+        state.map_features.geometry = 0.6
+        state.map_features.visibility = 0.7
+        state.map_features.cover_density = 0.5
+        state.map_features.verticality = 0.3
+        state.map_features.engagement_range = 0.6
+    elseif mapName:find("mirage") then
+        state.map_features.geometry = 0.7
+        state.map_features.visibility = 0.6
+        state.map_features.cover_density = 0.6
+        state.map_features.verticality = 0.4
+        state.map_features.engagement_range = 0.5
+    elseif mapName:find("inferno") then
+        state.map_features.geometry = 0.8
+        state.map_features.visibility = 0.4
+        state.map_features.cover_density = 0.7
+        state.map_features.verticality = 0.5
+        state.map_features.engagement_range = 0.4
+    elseif mapName:find("nuke") then
+        state.map_features.geometry = 0.7
+        state.map_features.visibility = 0.5
+        state.map_features.cover_density = 0.6
+        state.map_features.verticality = 0.8
+        state.map_features.engagement_range = 0.5
+    elseif mapName:find("overpass") then
+        state.map_features.geometry = 0.7
+        state.map_features.visibility = 0.6
+        state.map_features.cover_density = 0.6
+        state.map_features.verticality = 0.7
+        state.map_features.engagement_range = 0.6
+    else
+        -- Default values for unknown maps
+        state.map_features.geometry = 0.6
+        state.map_features.visibility = 0.6
+        state.map_features.cover_density = 0.6
+        state.map_features.verticality = 0.5
+        state.map_features.engagement_range = 0.6
+    end
+    
+    -- Further refine based on area name
+    if areaName:find("long") then
+        state.map_features.engagement_range = 0.8
+        state.map_features.visibility = 0.8
+    elseif areaName:find("tunnel") or areaName:find("vent") then
+        state.map_features.engagement_range = 0.2
+        state.map_features.visibility = 0.3
+        state.map_features.cover_density = 0.3
+    elseif areaName:find("mid") then
+        state.map_features.engagement_range = 0.6
+        state.map_features.visibility = 0.7
+    elseif areaName:find("site") or areaName:find("bomb") then
+        state.map_features.cover_density = 0.7
+        state.map_features.geometry = 0.8
+    end
+    
+    return state.map_features
+}
+
+-- Analyze current weapon
+local function analyzeWeapon(weaponName)
+    -- Update current weapon
+    state.current_weapon.type = weaponName
+    
+    -- Categorize weapon
+    if weaponName:find("ak") or weaponName:find("m4") then
+        state.current_weapon.category = "rifle"
+    elseif weaponName:find("awp") or weaponName:find("scout") then
+        state.current_weapon.category = "sniper"
+    elseif weaponName:find("mp") or weaponName:find("mac") or weaponName:find("p90") then
+        state.current_weapon.category = "smg"
+    elseif weaponName:find("nova") or weaponName:find("mag") then
+        state.current_weapon.category = "shotgun"
+    elseif weaponName:find("deagle") or weaponName:find("usp") or weaponName:find("glock") then
+        state.current_weapon.category = "pistol"
+    else
+        state.current_weapon.category = "other"
+    end
+    
+    -- Set weapon characteristics
+    if state.current_weapon.category == "rifle" then
+        state.current_weapon.characteristics = {
+            fire_rate = 0.8,
+            recoil_pattern = 0.7,
+            accuracy = 0.8,
+            damage_profile = 0.7,
+            range_effectiveness = 0.8
+        }
+    elseif state.current_weapon.category == "sniper" then
+        state.current_weapon.characteristics = {
+            fire_rate = 0.2,
+            recoil_pattern = 0.3,
+            accuracy = 0.9,
+            damage_profile = 0.9,
+            range_effectiveness = 0.9
+        }
+    elseif state.current_weapon.category == "smg" then
+        state.current_weapon.characteristics = {
+            fire_rate = 0.9,
+            recoil_pattern = 0.5,
+            accuracy = 0.6,
+            damage_profile = 0.5,
+            range_effectiveness = 0.4
+        }
+    elseif state.current_weapon.category == "shotgun" then
+        state.current_weapon.characteristics = {
+            fire_rate = 0.3,
+            recoil_pattern = 0.6,
+            accuracy = 0.4,
+            damage_profile = 0.8,
+            range_effectiveness = 0.2
+        }
+    elseif state.current_weapon.category == "pistol" then
+        state.current_weapon.characteristics = {
+            fire_rate = 0.5,
+            recoil_pattern = 0.4,
+            accuracy = 0.7,
+            damage_profile = 0.6,
+            range_effectiveness = 0.5
+        }
+    else
+        state.current_weapon.characteristics = {
+            fire_rate = 0.5,
+            recoil_pattern = 0.5,
+            accuracy = 0.5,
+            damage_profile = 0.5,
+            range_effectiveness = 0.5
+        }
+    end
+    
+    return state.current_weapon
+}
+
+-- Analyze current engagement
+local function analyzeEngagement(targetDistance, intensity, participants)
+    -- Determine engagement range category
+    local range_category = "medium"
+    if targetDistance < config.engagement_recognition.ranges.close then
+        range_category = "close"
+    elseif targetDistance > config.engagement_recognition.ranges.long then
+        range_category = "long"
+    end
+    
+    -- Update engagement state
+    state.current_engagement.range = range_category
+    state.current_engagement.intensity = intensity or 0.5
+    state.current_engagement.participants = participants or 1
+    
+    -- Determine engagement type based on context
+    -- In a real implementation, this would analyze player movement and actions
+    -- For simulation, use random selection weighted by range
+    local engagement_types = config.engagement_recognition.types
+    local type_weights = {}
+    
+    if range_category == "close" then
+        type_weights = {0.1, 0.3, 0.1, 0.2, 0.3} -- Favor wide peek and push
+    elseif range_category == "medium" then
+        type_weights = {0.2, 0.2, 0.2, 0.2, 0.2} -- Even distribution
+    else
+        type_weights = {0.3, 0.1, 0.2, 0.3, 0.1} -- Favor angle peek and hold
+    end
+    
+    -- Simple weighted random selection
+    local r = math.random()
+    local cumulative = 0
+    for i, weight in ipairs(type_weights) do
+        cumulative = cumulative + weight
+        if r <= cumulative then
+            state.current_engagement.type = engagement_types[i]
+            break
+        end
+    end
+    
+    -- Increment engagement duration if type hasn't changed
+    if state.history[1].timestamp > 0 and 
+       state.history[1].engagement_type == state.current_engagement.type then
+        state.current_engagement.duration = state.current_engagement.duration + 1
+    else
+        state.current_engagement.duration = 1
+        state.metrics.context_changes = state.metrics.context_changes + 1
+    end
+    
+    return state.current_engagement
+}
+
+-- Calculate parameter adjustments based on context
+local function calculateAdjustments()
+    -- Start with neutral adjustments
+    local adjustments = {
+        smoothing = 0,
+        acceleration = 0,
+        prediction = 0,
+        target_gravity = 0,
+        snap_strength = 0
+    }
+    
+    -- 1. Weapon-based adjustments
+    if state.current_weapon.category == "sniper" then
+        -- Snipers need more precision, less acceleration
+        adjustments.smoothing = 0.01
+        adjustments.acceleration = -0.3
+        adjustments.prediction = 0.1
+        adjustments.target_gravity = 0.1
+    elseif state.current_weapon.category == "rifle" then
+        -- Rifles need balanced settings
+        adjustments.smoothing = 0
+        adjustments.acceleration = 0.2
+        adjustments.prediction = 0.05
+    elseif state.current_weapon.category == "smg" then
+        -- SMGs need faster tracking
+        adjustments.smoothing = -0.01
+        adjustments.acceleration = 0.5
+        adjustments.prediction = 0.05
+        adjustments.snap_strength = 0.1
+    elseif state.current_weapon.category == "shotgun" then
+        -- Shotguns need snap and less precision
+        adjustments.smoothing = -0.015
+        adjustments.acceleration = 0.7
+        adjustments.snap_strength = 0.15
+    elseif state.current_weapon.category == "pistol" then
+        -- Pistols need precision
+        adjustments.smoothing = 0.005
+        adjustments.prediction = 0.1
+        adjustments.target_gravity = 0.05
+    }
+    
+    -- 2. Range-based adjustments
+    if state.current_engagement.range == "close" then
+        -- Close range: faster, less precise
+        adjustments.smoothing = adjustments.smoothing - 0.01
+        adjustments.acceleration = adjustments.acceleration + 0.3
+        adjustments.snap_strength = adjustments.snap_strength + 0.05
+    elseif state.current_engagement.range == "long" then
+        -- Long range: slower, more precise
+        adjustments.smoothing = adjustments.smoothing + 0.015
+        adjustments.acceleration = adjustments.acceleration - 0.2
+        adjustments.prediction = adjustments.prediction + 0.05
+        adjustments.target_gravity = adjustments.target_gravity + 0.05
+    }
+    
+    -- 3. Engagement type adjustments
+    if state.current_engagement.type == "angle_peek" then
+        -- Angle peeks need precision and prediction
+        adjustments.smoothing = adjustments.smoothing + 0.005
+        adjustments.prediction = adjustments.prediction + 0.05
+    elseif state.current_engagement.type == "wide_peek" then
+        -- Wide peeks need tracking
+        adjustments.target_gravity = adjustments.target_gravity + 0.1
+        adjustments.snap_strength = adjustments.snap_strength + 0.05
+    elseif state.current_engagement.type == "push" then
+        -- Pushes need speed and snap
+        adjustments.smoothing = adjustments.smoothing - 0.01
+        adjustments.acceleration = adjustments.acceleration + 0.2
+        adjustments.snap_strength = adjustments.snap_strength + 0.1
+    }
+    
+    -- 4. Map feature adjustments
+    if state.map_features.visibility > 0.7 then
+        -- Open areas need more prediction
+        adjustments.prediction = adjustments.prediction + 0.05
+    end
+    
+    if state.map_features.cover_density > 0.7 then
+        -- High cover areas need more snap
+        adjustments.snap_strength = adjustments.snap_strength + 0.05
+    }
+    
+    if state.map_features.engagement_range > 0.7 then
+        -- Long engagement areas need precision
+        adjustments.smoothing = adjustments.smoothing + 0.01
+    end
+    
+    -- 5. Historical context adjustments
+    local current_context = {
+        map = state.current_map,
+        area = state.current_area,
+        weapon = state.current_weapon.type,
+        engagement_type = state.current_engagement.type,
+        engagement_range = state.current_engagement.range
+    }
+    
+    local similar_contexts = findSimilarContexts(current_context, 0.7)
+    if #similar_contexts > 0 then
+        -- Calculate weighted average of historical adjustments
+        local total_similarity = 0
+        local weighted_adjustments = {
+            smoothing = 0,
+            acceleration = 0,
+            prediction = 0,
+            target_gravity = 0,
+            snap_strength = 0
+        }
+        
+        for _, context in ipairs(similar_contexts) do
+            total_similarity = total_similarity + context.similarity
+            for param, value in pairs(context.adjustments) do
+                weighted_adjustments[param] = weighted_adjustments[param] + value * context.similarity
+            end
+        end
+        
+        if total_similarity > 0 then
+            -- Blend historical adjustments (30% weight)
+            for param, value in pairs(weighted_adjustments) do
+                weighted_adjustments[param] = value / total_similarity
+                adjustments[param] = adjustments[param] * 0.7 + weighted_adjustments[param] * 0.3
+            end
+        end
+    end
+    
+    -- 6. Clamp all values to configured ranges
+    for param, value in pairs(adjustments) do
+        local range = config.parameter_adjustments[param]
+        if range then
+            if value < range.min then value = range.min end
+            if value > range.max then value = range.max end
+            adjustments[param] = value
+        end
+    end
+    
+    -- Update state
+    state.adjustments = adjustments
+    
+    -- Calculate adaptation level metric
+    local adaptation_sum = math.abs(adjustments.smoothing) + 
+                           math.abs(adjustments.acceleration) + 
+                           math.abs(adjustments.prediction) + 
+                           math.abs(adjustments.target_gravity) + 
+                           math.abs(adjustments.snap_strength)
+    
+    state.metrics.adaptation_level = adaptation_sum / 5
+    
+    return adjustments
+}
+
+-- Update context history
+local function updateHistory()
+    -- Shift history entries
+    for i = config.history_length, 2, -1 do
+        state.history[i] = state.history[i-1]
+    end
+    
+    -- Add current context to history
+    state.history[1] = {
+        timestamp = os.clock(),
+        map = state.current_map,
+        area = state.current_area,
+        weapon = state.current_weapon.type,
+        engagement_type = state.current_engagement.type,
+        engagement_range = state.current_engagement.range,
+        adjustments = {
+            smoothing = state.adjustments.smoothing,
+            acceleration = state.adjustments.acceleration,
+            prediction = state.adjustments.prediction,
+            target_gravity = state.adjustments.target_gravity,
+            snap_strength = state.adjustments.snap_strength
+        }
+    }
+}
+
+-- Main context update function
+local function updateContext(mapName, areaName, weaponName, targetDistance, intensity, participants)
+    -- Update frame counter
+    state.frame = state.frame + 1
+    
+    -- Only update periodically for performance
+    if state.frame % config.update_frequency ~= 0 then
+        return state.adjustments
+    end
+    
+    -- Record update time
+    state.last_update = os.clock()
+    
+    -- 1. Analyze map context
+    analyzeMap(mapName or "unknown", areaName or "")
+    
+    -- 2. Analyze weapon context
+    analyzeWeapon(weaponName or "unknown")
+    
+    -- 3. Analyze engagement context
+    analyzeEngagement(targetDistance or 500, intensity, participants)
+    
+    -- 4. Calculate parameter adjustments
+    calculateAdjustments()
+    
+    -- 5. Update history
+    updateHistory()
+    
+    -- 6. Update confidence metric
+    state.metrics.recognition_confidence = 0.7 + (state.frame / 10000) * 0.3
+    if state.metrics.recognition_confidence > 1.0 then
+        state.metrics.recognition_confidence = 1.0
+    end
+    
+    return state.adjustments
+}
+
+-- Get optimal parameters for current context
+local function getOptimalParameters()
+    return {
+        -- Smoothing parameters
+        smoothing_base = 0.052 + state.adjustments.smoothing,
+        smoothing_enhanced = 0.026 + state.adjustments.smoothing,
+        
+        -- Acceleration parameters
+        acceleration_base = 4.8 + state.adjustments.acceleration,
+        acceleration_enhanced = 6.2 + state.adjustments.acceleration,
+        
+        -- Prediction parameters
+        prediction_factor = 0.48 + state.adjustments.prediction,
+        
+        -- Targeting parameters
+        target_gravity = 0.72 + state.adjustments.target_gravity,
+        snap_strength = 0.78 + state.adjustments.snap_strength,
+        
+        -- Context information
+        context = {
+            map = state.current_map,
+            area = state.current_area,
+            weapon = state.current_weapon.category,
+            range = state.current_engagement.range,
+            engagement = state.current_engagement.type
+        },
+        
+        -- Confidence in recommendations
+        confidence = state.metrics.recognition_confidence
+    }
+}
+
+-- Module initialization
+local function initialize()
+    -- Reset state
+    state.frame = 0
+    state.last_update = 0
+    state.metrics.context_changes = 0
+    state.metrics.adaptation_level = 0
+    state.metrics.recognition_confidence = 0.5
+    
+    -- Reset history
+    for i = 1, config.history_length do
+        state.history[i].timestamp = 0
+    end
+    
+    MODULE_INFO.activated = true
+    return true
+}
+
+-- Module update function
+function OnUpdate()
+    if not MODULE_INFO.activated then
+        initialize()
+    end
+    
+    -- Basic update - just increment frame counter
+    state.frame = state.frame + 1
+    
+    return true
+}
+
+-- Export module interface
+return {
+    name = MODULE_INFO.name,
+    version = MODULE_INFO.version,
+    
+    -- Core functions
+    initialize = initialize,
+    update = OnUpdate,
+    
+    -- Context interface
+    updateContext = updateContext,
+    getOptimalParameters = getOptimalParameters,
+    
+    -- Export module info for anti-detection
+    info = function() return MODULE_INFO end
+}
